@@ -361,30 +361,30 @@ Calls time out at 10s. Any failure degrades to the no-LLM path.
 ```mermaid
 flowchart LR
   subgraph Phone
-    N[Bank / wallet notification] --> MD[MacroDroid]
+    N["Bank / wallet notification"] --> MD["MacroDroid"]
   end
 
   subgraph External
-    TG[Telegram Bot API]
-    LLM[LLM provider<br/>Anthropic / OpenAI / Workers AI]
-    G[Google OAuth]
+    TG["Telegram Bot API"]
+    LLM["LLM provider<br/>Anthropic, OpenAI, Workers AI"]
+    G["Google OAuth"]
   end
 
-  subgraph Runtime["denarii runtime (Cloudflare Worker | Node container)"]
-    API[Hono API]
+  subgraph Runtime["denarii runtime: Cloudflare Worker or Node container"]
+    API["Hono API"]
     subgraph Core["packages/core"]
-      CL[Classifier<br/>regex rules]
-      DD[Dedupe]
-      CAT[Categorizer]
-      FL[Telegram flows]
+      CL["Classifier<br/>regex rules"]
+      DD["Dedupe"]
+      CAT["Categorizer"]
+      FL["Telegram flows"]
     end
-    RP[(Rule packs<br/>YAML, bundled)]
-    CRON[Scheduler<br/>daily digest]
-    SPA[React SPA<br/>static assets]
+    RP[("Rule packs<br/>YAML, bundled")]
+    CRON["Scheduler<br/>daily digest"]
+    SPA["React SPA<br/>static assets"]
   end
 
-  DB[(SQLite<br/>D1 | better-sqlite3)]
-  U((User))
+  DB[("SQLite<br/>D1 or better-sqlite3")]
+  U(("User"))
 
   MD -- "POST /api/ingest" --> API
   API --> CL
@@ -392,12 +392,12 @@ flowchart LR
   CL -- "purchase / transfer" --> DD --> CAT
   CL -- "unmatched" --> FL
   CAT -- "no merchant rule" --> FL
-  CAT -. suggest / extract / propose rule .-> LLM
+  CAT -. "suggest / extract / propose rule" .-> LLM
   FL <--> TG
   TG <--> U
   CRON --> FL
   Core <--> DB
-  U -- browser --> SPA -- "tRPC" --> API
+  U -- "browser" --> SPA -- "tRPC" --> API
   API -- "Better Auth" --> G
 ```
 
