@@ -35,5 +35,5 @@ Pre-implementation. Only docs exist. Build commands will be added here once the 
 ## Conventions
 
 - TypeScript, strict mode. Vitest for tests.
-- Nx + pnpm workspaces (ADR-0009). Don't introduce Turborepo.
+- Nx + npm workspaces (ADR-0009). Don't introduce Turborepo.
 - The open-source repo is public: never commit secrets, real notification logs, or personal data.
