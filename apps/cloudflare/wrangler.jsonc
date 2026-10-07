@@ -1,0 +1,25 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "denarii",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "denarii.emilioguernik.com", "custom_domain": true }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "denarii",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../../packages/db/migrations"
+    }
+  ],
+  // Rule packs are bundled as raw text.
+  "rules": [{ "type": "Text", "globs": ["**/*.yaml"], "fallthrough": true }],
+  // Secrets (wrangler secret put / .dev.vars): WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN,
+  // TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET
+  "vars": {
+    "RULE_PACKS": "ar.galicia",
+    "TIMEZONE": "America/Argentina/Cordoba",
+    "LOCALE": "es"
+  }
+}

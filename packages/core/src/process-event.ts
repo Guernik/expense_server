@@ -1,0 +1,69 @@
+import { INTL_LOCALE, t } from "./i18n";
+import { formatMoney, toMinor } from "./money";
+import type { Messenger, Store, StoredEvent, User } from "./ports";
+import { type CompiledRule, classify } from "./rules/engine";
+
+export interface ProcessDeps {
+  store: Store;
+  messenger: Messenger;
+  rules: CompiledRule[];
+}
+
+/** Classifies a stored event and, for purchases and transfers, records and announces them. */
+export async function processEvent(
+  deps: ProcessDeps,
+  user: User,
+  event: StoredEvent,
+): Promise<void> {
+  const { store, messenger, rules } = deps;
+  const result = classify(rules, event);
+
+  if (result.kind === "unmatched") {
+    await store.classifyEvent(event.id, { status: "unmatched" });
+    return;
+  }
+  const ruleRef = { ruleId: result.rule.rule.id, ruleSource: result.rule.source };
+  if (result.kind === "ignore") {
+    await store.classifyEvent(event.id, { status: "ignored", ...ruleRef });
+    return;
+  }
+
+  const { fields } = result;
+  const paymentMethodId = fields.paymentMethod
+    ? await store.upsertPaymentMethod(user.id, fields.paymentMethod)
+    : null;
+  const purchase = await store.insertPurchase({
+    userId: user.id,
+    kind: result.kind,
+    occurredAt: event.receivedAt,
+    amountMinor: toMinor(fields.amount, fields.currency),
+    currency: fields.currency,
+    merchantRaw: fields.merchant,
+    merchantNormalized: fields.merchantNormalized,
+    paymentMethodId,
+  });
+  await store.classifyEvent(event.id, { status: result.kind, ...ruleRef, purchaseId: purchase.id });
+
+  const intlLocale = INTL_LOCALE[user.locale];
+  const time =
+    fields.time ??
+    new Intl.DateTimeFormat(intlLocale, {
+      timeZone: user.timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(event.receivedAt);
+  const amount = formatMoney(purchase.amountMinor, purchase.currency, intlLocale);
+  const text =
+    result.kind === "transfer"
+      ? t(user.locale, "transferNotice", { amount, time })
+      : t(user.locale, "purchaseNotice", {
+          amount,
+          merchant: fields.merchant,
+          paymentMethod: fields.paymentMethod ?? "",
+          time,
+        });
+
+  const { messageId } = await messenger.send(user.telegramChatId, text);
+  await store.setPurchaseTelegramMessage(purchase.id, messageId);
+}
