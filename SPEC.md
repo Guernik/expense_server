@@ -363,7 +363,7 @@ Calls time out at 10s. Any failure degrades to the no-LLM path.
   <img alt="denarii architecture" src="docs/diagrams/architecture-light.png">
 </picture>
 
-Nx + pnpm workspaces.
+Nx + npm workspaces.
 
 ```
 packages/

@@ -12,7 +12,7 @@ Format: Context, Decision, Consequences, Alternatives. Status is one of `Accepte
 | [0006](0006-derived-group.md) | Category belongs to one group, group is derived |
 | [0007](0007-react-spa-trpc.md) | React SPA with tRPC for the dashboard |
 | [0008](0008-better-auth-google.md) | Better Auth with Google and an email allowlist |
-| [0009](0009-nx-monorepo.md) | Nx + pnpm monorepo |
+| [0009](0009-nx-monorepo.md) | Nx + npm workspaces monorepo |
 | [0010](0010-optional-pluggable-llm.md) | LLM is optional and pluggable |
 | [0011](0011-dedupe-window.md) | Dedupe by amount + currency within 30 seconds |
 | [0012](0012-telegram-primary-interaction.md) | Telegram is the primary interaction surface |
