@@ -16,3 +16,4 @@ Format: Context, Decision, Consequences, Alternatives. Status is one of `Accepte
 | [0010](0010-optional-pluggable-llm.md) | LLM is optional and pluggable |
 | [0011](0011-dedupe-window.md) | Dedupe by amount + currency within 30 seconds |
 | [0012](0012-telegram-primary-interaction.md) | Telegram is the primary interaction surface |
+| [0013](0013-local-dev-bot.md) | Local development uses a separate dev bot with polling |
