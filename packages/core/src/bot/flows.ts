@@ -5,6 +5,7 @@ import type {
   Category,
   ChatState,
   Clock,
+  LlmProvider,
   Messenger,
   Store,
   StoredEvent,
@@ -15,6 +16,7 @@ import { UNKNOWN_MERCHANT } from "../rules/engine";
 import { ignoreSimilarRule, similarMatch } from "../rules/ignore-similar";
 import { type Action, decodeAction } from "./callback-data";
 import { parseManualPurchase } from "./manual-purchase";
+import { suggestCategory, suggestionLabel } from "./suggestion";
 import {
   categoryLabel,
   confirmationKeyboard,
@@ -23,6 +25,7 @@ import {
   excludedText,
   groupKeyboard,
   ignoreSimilarKeyboard,
+  MAX_NAME_LENGTH,
   morePageKeyboard,
   pickerKeyboard,
   pickerText,
@@ -31,10 +34,14 @@ import {
   unmatchedText,
 } from "./views";
 
+export { MAX_NAME_LENGTH };
+
 export interface BotDeps {
   store: Store;
   messenger: Messenger;
   clock: Clock;
+  /** Absent with `LLM_PROVIDER=none`: the picker shows without a suggestion. */
+  llm?: LlmProvider | undefined;
 }
 
 /** What the bot receives from the configured chat, independent of the messenger. */
@@ -42,7 +49,6 @@ export type BotInput =
   | { kind: "text"; text: string }
   | { kind: "callback"; callbackId: string; messageId: number; data: string };
 
-export const MAX_NAME_LENGTH = 40;
 const UNKNOWN_MERCHANT_NORMALIZED = normalizeMerchant(UNKNOWN_MERCHANT);
 const CHAT_STATE_TTL_MS = 15 * 60_000;
 const TOP_WINDOW_MS = 90 * 24 * 60 * 60_000;
@@ -56,7 +62,7 @@ export function canHaveMerchantRule(purchase: StoredPurchase): boolean {
 
 /**
  * First message for a new purchase (SPEC §7.1): categorized silently with a ✅ confirmation when a
- * merchant rule matches, otherwise the category picker.
+ * merchant rule matches, otherwise the category picker, led by the LLM suggestion if there is one.
  */
 export async function announcePurchase(
   deps: BotDeps,
@@ -77,10 +83,11 @@ export async function announcePurchase(
       confirmationKeyboard(user.locale, purchase.id),
     );
   } else {
+    const suggestion = await suggestCategory(deps, user, purchase);
     sent = await messenger.send(
       user.telegramChatId,
       pickerText(user, purchase),
-      pickerKeyboard(user.locale, purchase.id, await topCategories(deps, user)),
+      await pickerFor(deps, user, purchase.id, suggestion),
     );
   }
   await store.setPurchaseTelegramMessage(purchase.id, sent.messageId);
@@ -130,12 +137,19 @@ async function handleCallback(
       await applyCategory(deps, user, purchase, category, input.messageId);
       return answer();
     }
+    case "suggestion": {
+      const category = await suggestedCategory(deps, user, purchase);
+      if (!category) return answer();
+      await store.clearChatState(chatId);
+      await applyCategory(deps, user, purchase, category, input.messageId);
+      return answer();
+    }
     case "picker":
       await messenger.edit(
         chatId,
         input.messageId,
         pickerText(user, purchase),
-        pickerKeyboard(user.locale, purchase.id, await topCategories(deps, user)),
+        await pickerFor(deps, user, purchase.id, purchase.suggestion),
       );
       return answer();
     case "more":
@@ -424,9 +438,31 @@ async function ensureCategory(
   return existing ?? deps.store.createCategory(user.id, name, groupId);
 }
 
-function topCategories(deps: BotDeps, user: User): Promise<Category[]> {
+/** The stored suggestion as a category, creating the suggested category and group if new. */
+async function suggestedCategory(
+  deps: BotDeps,
+  user: User,
+  purchase: StoredPurchase,
+): Promise<Category | null> {
+  const { suggestion } = purchase;
+  if (!suggestion) return null;
+  if ("categoryId" in suggestion) return deps.store.getCategory(user.id, suggestion.categoryId);
+  const group = await deps.store.ensureGroup(user.id, suggestion.groupName);
+  return ensureCategory(deps, user, suggestion.categoryName, group.id);
+}
+
+async function pickerFor(
+  deps: BotDeps,
+  user: User,
+  purchaseId: number,
+  suggestion: StoredPurchase["suggestion"],
+) {
   const since = new Date(deps.clock.now().getTime() - TOP_WINDOW_MS);
-  return deps.store.topCategories(user.id, since, TOP_CATEGORIES);
+  const [top, label] = await Promise.all([
+    deps.store.topCategories(user.id, since, TOP_CATEGORIES),
+    suggestionLabel(deps.store, user, suggestion),
+  ]);
+  return pickerKeyboard(user.locale, purchaseId, top, label);
 }
 
 function setState(deps: BotDeps, user: User, state: ChatState): Promise<void> {

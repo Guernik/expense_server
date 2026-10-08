@@ -10,6 +10,7 @@ import {
   type Store,
   type StoredEvent,
   type StoredPurchase,
+  type Suggestion,
   type User,
 } from "@denarii/core";
 import { and, asc, between, count, desc, eq, gte, sql } from "drizzle-orm";
@@ -159,6 +160,7 @@ export function createStore(db: Database): Store {
         paymentMethod: row.paymentMethod,
         categoryId: p.categoryId,
         telegramMessageId: p.telegramMessageId,
+        suggestion: toSuggestion(p),
       };
     },
 
@@ -185,6 +187,62 @@ export function createStore(db: Database): Store {
         .update(schema.purchases)
         .set({ status: "excluded" })
         .where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async setPurchaseSuggestion(purchaseId, suggestion) {
+      await db
+        .update(schema.purchases)
+        .set(
+          "categoryId" in suggestion
+            ? {
+                suggestedCategoryId: suggestion.categoryId,
+                suggestedCategoryName: null,
+                suggestedGroupName: null,
+              }
+            : {
+                suggestedCategoryId: null,
+                suggestedCategoryName: suggestion.categoryName,
+                suggestedGroupName: suggestion.groupName,
+              },
+        )
+        .where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async listUserCategorized(userId, limit) {
+      const rows = await db
+        .select({
+          merchant: schema.purchases.merchantRaw,
+          amountMinor: schema.purchases.amountMinor,
+          currency: schema.purchases.currency,
+          paymentMethod: schema.paymentMethods.label,
+          id: schema.categories.id,
+          name: schema.categories.name,
+          groupId: schema.groups.id,
+          groupName: schema.groups.name,
+        })
+        .from(schema.purchases)
+        .innerJoin(schema.categories, eq(schema.categories.id, schema.purchases.categoryId))
+        .innerJoin(schema.groups, eq(schema.groups.id, schema.categories.groupId))
+        .leftJoin(
+          schema.paymentMethods,
+          eq(schema.paymentMethods.id, schema.purchases.paymentMethodId),
+        )
+        .where(
+          and(
+            eq(schema.purchases.userId, userId),
+            eq(schema.purchases.status, "categorized"),
+            eq(schema.purchases.categorizedBy, "user"),
+          ),
+        )
+        .orderBy(desc(schema.purchases.updatedAt), desc(schema.purchases.id))
+        .limit(limit);
+      return rows.map((row) => ({
+        merchant: row.merchant,
+        amountMinor: row.amountMinor,
+        currency: row.currency,
+        paymentMethod: row.paymentMethod,
+        category: toCategory(row),
+      }));
     },
 
     async listUserRules(userId) {
@@ -346,6 +404,14 @@ function toCategory(row: {
 /** Case-insensitive name match (ASCII), so "delivery" finds "Delivery". */
 function sameName(column: SQLiteColumn, name: string) {
   return sql`${column} = ${name} COLLATE NOCASE`;
+}
+
+function toSuggestion(row: typeof schema.purchases.$inferSelect): Suggestion | null {
+  if (row.suggestedCategoryId !== null) return { categoryId: row.suggestedCategoryId };
+  if (row.suggestedCategoryName !== null && row.suggestedGroupName !== null) {
+    return { categoryName: row.suggestedCategoryName, groupName: row.suggestedGroupName };
+  }
+  return null;
 }
 
 function toEvent(row: typeof schema.events.$inferSelect): StoredEvent {

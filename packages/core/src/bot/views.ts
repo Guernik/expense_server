@@ -6,6 +6,8 @@ import { encodeAction } from "./callback-data";
 
 export const TOP_CATEGORIES = 6;
 export const MORE_PAGE_SIZE = 12;
+/** Longest category or group name the bot accepts. */
+export const MAX_NAME_LENGTH = 40;
 const BUTTONS_PER_ROW = 3;
 
 export function categoryLabel(category: Category): string {
@@ -87,9 +89,27 @@ export function confirmationKeyboard(locale: Locale, purchaseId: number): Keyboa
   return [[{ text: t(locale, "change"), data: encodeAction({ type: "picker", purchaseId }) }]];
 }
 
-/** Top categories, then `More…` `➕ New category`, then `🚫 Not a purchase` `Skip`. */
-export function pickerKeyboard(locale: Locale, purchaseId: number, top: Category[]): Keyboard {
+/**
+ * The LLM suggestion if any, then top categories, then `More…` `➕ New category`, then
+ * `🚫 Not a purchase` `Skip`.
+ */
+export function pickerKeyboard(
+  locale: Locale,
+  purchaseId: number,
+  top: Category[],
+  suggestion: { category: string; group: string } | null = null,
+): Keyboard {
   return [
+    ...(suggestion
+      ? [
+          [
+            {
+              text: t(locale, "suggestion", suggestion),
+              data: encodeAction({ type: "suggestion", purchaseId }),
+            },
+          ],
+        ]
+      : []),
     ...chunk(
       top.map((c) => ({
         text: c.name,

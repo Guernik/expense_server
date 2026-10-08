@@ -4,6 +4,8 @@
  */
 export type Action =
   | { type: "pick"; purchaseId: number; categoryId: number }
+  /** `✨` LLM suggestion stored on the purchase. */
+  | { type: "suggestion"; purchaseId: number }
   | { type: "more"; purchaseId: number; page: number }
   /** Shows the top picker: `Change` on a confirmation, or back from `More…`. */
   | { type: "picker"; purchaseId: number }
@@ -29,6 +31,8 @@ export function encodeAction(action: Action): string {
   switch (action.type) {
     case "pick":
       return `c:${action.purchaseId}:${action.categoryId}`;
+    case "suggestion":
+      return `a:${action.purchaseId}`;
     case "more":
       return `m:${action.purchaseId}:${action.page}`;
     case "picker":
@@ -79,6 +83,8 @@ export function decodeAction(data: string): Action | null {
     }
   }
   switch (tag) {
+    case "a":
+      return { type: "suggestion", purchaseId: id };
     case "p":
       return { type: "picker", purchaseId: id };
     case "n":

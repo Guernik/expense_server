@@ -38,6 +38,7 @@ const en = {
   confirm: "Confirm",
   cancel: "Cancel",
   ignoreRuleSaved: "🔇 Similar notifications will be ignored.",
+  suggestion: "✨ {category} ({group})",
 };
 
 const es: typeof en = {
@@ -75,6 +76,7 @@ const es: typeof en = {
   confirm: "Confirmar",
   cancel: "Cancelar",
   ignoreRuleSaved: "🔇 Las notificaciones similares se van a ignorar.",
+  suggestion: "✨ {category} ({group})",
 };
 
 const MESSAGES: Record<Locale, typeof en> = { en, es };

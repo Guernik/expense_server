@@ -72,7 +72,14 @@ export interface StoredPurchase extends Omit<NewPurchase, "sourceEventId"> {
   categoryId: number | null;
   paymentMethod: string | null;
   telegramMessageId: number | null;
+  suggestion: Suggestion | null;
 }
+
+/**
+ * An LLM-proposed category stored on a purchase (SPEC §7.1). Never applied without the user. A new
+ * category names its group, which may already exist.
+ */
+export type Suggestion = { categoryId: number } | { categoryName: string; groupName: string };
 
 export interface Group {
   id: number;
@@ -84,6 +91,14 @@ export interface Category {
   id: number;
   name: string;
   group: Group;
+}
+
+export interface CategorizedExample {
+  merchant: string;
+  amountMinor: number;
+  currency: Currency;
+  paymentMethod: string | null;
+  category: Category;
 }
 
 /** Free-text answer the bot is waiting for in a chat (SPEC §9 `chat_state`). */
@@ -124,6 +139,9 @@ export interface Store {
   categorizePurchase(purchaseId: number, categoryId: number, by: CategorizedBy): Promise<void>;
   /** Marks the purchase `excluded`: kept, not counted. */
   excludePurchase(purchaseId: number): Promise<void>;
+  setPurchaseSuggestion(purchaseId: number, suggestion: Suggestion): Promise<void>;
+  /** The latest purchases the user categorized by hand, newest first (LLM examples). */
+  listUserCategorized(userId: number, limit: number): Promise<CategorizedExample[]>;
 
   /** Enabled user rules. Rows that no longer validate against the rule schema are skipped. */
   listUserRules(userId: number): Promise<Rule[]>;
@@ -168,6 +186,37 @@ export interface Messenger {
   edit(chatId: string, messageId: number, text: string, keyboard?: Keyboard): Promise<void>;
   /** Acknowledges a button tap, optionally with a short toast. */
   answerCallback(callbackId: string, text?: string): Promise<void>;
+}
+
+/** What the LLM sees when asked to categorize a purchase (SPEC §7.1 step 2). */
+export interface SuggestCategoryInput {
+  merchant: string;
+  amountMinor: number;
+  currency: Currency;
+  paymentMethod: string | null;
+  categories: Category[];
+  /** All groups, including ones without categories. */
+  groups: Group[];
+  examples: CategorizedExample[];
+}
+
+/**
+ * Raw structured LLM output: an existing category, or a new category name with an existing group
+ * or a new group name. Validated by the core before it is stored.
+ */
+export interface SuggestCategoryOutput {
+  categoryId?: number | null;
+  newCategoryName?: string | null;
+  groupId?: number | null;
+  newGroupName?: string | null;
+}
+
+/**
+ * Optional LLM (ADR-0010). Never decides whether an event is a purchase (ADR-0001). Implementations
+ * time out after 10 s; any rejection falls back to the no-LLM path.
+ */
+export interface LlmProvider {
+  suggestCategory(input: SuggestCategoryInput): Promise<SuggestCategoryOutput>;
 }
 
 export interface Clock {
