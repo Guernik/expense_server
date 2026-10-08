@@ -187,7 +187,7 @@ Promotional notifications aren't enumerated. They fall to `unmatched`, and the u
 
 After classification as `purchase` or `transfer`:
 
-- Look for an existing purchase of the same user with the same `amount_minor` and `currency` whose source event's `received_at` is within **±30 seconds**.
+- Look for an existing purchase of the same user with the same `amount_minor` and `currency` whose source event's (`purchases.source_event_id`) `received_at` is within **±30 seconds**. The check and insert are one statement, so concurrent duplicates can't both create a purchase.
 - If one exists, link the new event to it (`events.purchase_id`), mark the event `duplicate`, and keep the richer extraction (more non-null fields wins; payment method and merchant from a card notification beat wallet ones). No new Telegram prompt.
 - Anything outside 30 seconds is a new purchase.
 
@@ -306,7 +306,7 @@ purchases          id, user_id, kind (purchase|transfer), status (pending|catego
                    occurred_at, amount_minor, currency, merchant_raw, merchant_normalized,
                    payment_method_id?, category_id?, comment?, suggested_category_id?,
                    categorized_by (rule|user|import)?, source (live|import),
-                   telegram_message_id?, created_at, updated_at
+                   telegram_message_id?, source_event_id?, created_at, updated_at
 payment_methods    id, user_id, label                        UNIQUE(user_id, label)
 groups             id, user_id, name                         UNIQUE(user_id, name)
 categories         id, user_id, name, group_id               UNIQUE(user_id, name)

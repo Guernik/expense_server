@@ -27,6 +27,9 @@ export interface ExtractedFields {
   time?: string;
 }
 
+/** Merchant of a rule that neither captures nor sets one. */
+export const UNKNOWN_MERCHANT = "Unknown";
+
 export type Classification =
   | { kind: "unmatched" }
   | { kind: "ignore"; rule: CompiledRule }
@@ -96,7 +99,7 @@ function extract(rule: Rule, groups: Record<string, string>): ExtractedFields {
     transform.currency?.default;
   if (!currency) throw new Error(`Rule ${rule.id}: no currency for token "${token ?? ""}"`);
 
-  const merchant = transform.merchant ?? groups.merchant?.trim() ?? "Unknown";
+  const merchant = transform.merchant ?? groups.merchant?.trim() ?? UNKNOWN_MERCHANT;
   const paymentMethod = transform.payment_method
     ? fillTemplate(transform.payment_method, groups)
     : undefined;

@@ -1,5 +1,12 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  type AnySQLiteColumn,
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 /** SQLite schema shared by D1 and better-sqlite3 (ADR-0005). Timestamps are UTC ISO strings. */
 
@@ -54,10 +61,15 @@ export const purchases = sqliteTable(
       .notNull()
       .default("live"),
     telegramMessageId: integer("telegram_message_id"),
+    /** The event that created this purchase. Its `received_at` anchors dedupe (ADR-0011). */
+    sourceEventId: integer("source_event_id").references((): AnySQLiteColumn => events.id),
     createdAt: createdAt(),
     updatedAt: createdAt().$onUpdate(() => new Date().toISOString()),
   },
-  (t) => [index("purchases_user_occurred").on(t.userId, t.occurredAt)],
+  (t) => [
+    index("purchases_user_occurred").on(t.userId, t.occurredAt),
+    uniqueIndex("purchases_source_event").on(t.sourceEventId),
+  ],
 );
 
 export const events = sqliteTable(
