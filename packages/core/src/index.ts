@@ -3,6 +3,8 @@ export * from "./bot/flows";
 export * from "./bot/manual-purchase";
 export * from "./dedupe";
 export * from "./i18n";
+export * from "./import/parse";
+export * from "./import/plan";
 export * from "./money";
 export * from "./normalize";
 export * from "./occurred-at";

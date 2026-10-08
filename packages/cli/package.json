@@ -1,0 +1,18 @@
+{
+  "name": "@denarii/cli",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "denarii": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@denarii/core": "*",
+    "@denarii/db": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

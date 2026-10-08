@@ -16,6 +16,7 @@ Instructions for coding agents working on denarii (repo: `expense_server`).
 - `npm run format`: format with Biome
 - `npm run generate -w @denarii/db`: generate a Drizzle migration after changing `packages/db/src/schema.ts`
 - `npm run dev -w @denarii/cloudflare`: local Worker with local D1 (secrets in `apps/cloudflare/.dev.vars`, apply migrations first with `npm run migrate:local -w @denarii/cloudflare`)
+- `npm run denarii -w @denarii/cli -- import <file.json|file.csv> [--remote] [--dry-run]`: backfill import (SPEC §10) into local D1 (default) or remote D1 via wrangler
 - `npm run types -w @denarii/cloudflare`: regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` or `.dev.vars`
 
 Packages import each other's TypeScript sources directly (no build step). Rule packs (`rules/**/*.yaml`) are imported as raw text.

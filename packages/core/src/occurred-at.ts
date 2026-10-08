@@ -19,6 +19,13 @@ export function resolveOccurredAt(
   return zonedToUtc(year, month, day - 1, hour, minute, timeZone);
 }
 
+/** A local date ("YYYY-MM-DD") and optional "HH:MM" in `timeZone` to a UTC instant. Midnight without a time. */
+export function localDateTimeToUtc(date: string, time: string | undefined, timeZone: string): Date {
+  const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+  const [hour = 0, minute = 0] = time ? time.split(":").map(Number) : [];
+  return zonedToUtc(year, month, day, hour, minute, timeZone);
+}
+
 interface WallClock {
   year: number;
   month: number;
