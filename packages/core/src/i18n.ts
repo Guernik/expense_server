@@ -46,6 +46,12 @@ const en = {
   setGroupUsage: "Usage: /setgroup <category> <group>, e.g. /setgroup Delivery Food",
   unknownCategory: "There is no category named {name}.",
   categoryMoved: "{category} is now in {group}.",
+  digestTitle: "📋 Daily summary",
+  digestPending: "🛒 Pending purchases: {count}. Send /pending to answer them.",
+  digestUnmatched: "❓ Unrecognized notifications without an answer: {count}",
+  digestMisses:
+    "🔍 Possible classifier misses in the last 24 h: {count}\nMarked as not a purchase, with no ignore rule.",
+  digestMore: "…and {count} more",
 };
 
 const es: typeof en = {
@@ -92,6 +98,12 @@ const es: typeof en = {
   setGroupUsage: "Uso: /setgroup <categoría> <grupo>, por ejemplo /setgroup Delivery Comida",
   unknownCategory: "No hay ninguna categoría llamada {name}.",
   categoryMoved: "{category} ahora está en {group}.",
+  digestTitle: "📋 Resumen diario",
+  digestPending: "🛒 Compras pendientes: {count}. Mandá /pending para responderlas.",
+  digestUnmatched: "❓ Notificaciones no reconocidas sin responder: {count}",
+  digestMisses:
+    "🔍 Posibles errores del clasificador en las últimas 24 h: {count}\nMarcadas como no compra, sin regla para ignorar.",
+  digestMore: "…y {count} más",
 };
 
 const MESSAGES: Record<Locale, typeof en> = { en, es };

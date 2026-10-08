@@ -1,5 +1,14 @@
-import { LOCALES } from "@denarii/core";
+import { DEFAULT_DIGEST_CRON, LOCALES, parseCron } from "@denarii/core";
 import { z } from "zod";
+
+function isCron(expression: string): boolean {
+  try {
+    parseCron(expression);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function isTimeZone(tz: string): boolean {
   try {
@@ -27,6 +36,8 @@ export const configSchema = z.object({
     .pipe(z.array(z.string()).min(1)),
   TIMEZONE: z.string().default("America/Argentina/Cordoba").refine(isTimeZone, "unknown time zone"),
   LOCALE: z.enum(LOCALES).default("en"),
+  /** Daily digest schedule, local time in `TIMEZONE` (SPEC §7.6). */
+  DIGEST_CRON: z.string().default(DEFAULT_DIGEST_CRON).refine(isCron, "invalid cron expression"),
 });
 
 export type Config = z.output<typeof configSchema>;

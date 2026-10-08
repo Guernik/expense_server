@@ -210,7 +210,8 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
   return app;
 }
 
-function ensureUser({ store, config }: Runtime) {
+/** The single v1 user, configured by `TELEGRAM_CHAT_ID`. */
+export function ensureUser({ store, config }: Pick<Runtime, "store" | "config">) {
   return store.ensureUser({
     telegramChatId: config.TELEGRAM_CHAT_ID,
     locale: config.LOCALE,

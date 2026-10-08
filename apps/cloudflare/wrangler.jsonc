@@ -16,6 +16,9 @@
       "migrations_dir": "../../packages/db/migrations"
     }
   ],
+  // Cron Triggers only run in UTC, so the Worker wakes every minute and runs the jobs due in
+  // TIMEZONE, e.g. the daily digest at DIGEST_CRON (local time).
+  "triggers": { "crons": ["* * * * *"] },
   // Rule packs are bundled as raw text.
   "rules": [{ "type": "Text", "globs": ["**/*.yaml"], "fallthrough": true }],
   // Secrets (wrangler secret put / .dev.vars): WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN,
@@ -23,6 +26,7 @@
   "vars": {
     "RULE_PACKS": "ar.galicia,ar.mercadopago",
     "TIMEZONE": "America/Argentina/Cordoba",
-    "LOCALE": "es"
+    "LOCALE": "es",
+    "DIGEST_CRON": "0 21 * * *"
   }
 }

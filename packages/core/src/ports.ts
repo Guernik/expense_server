@@ -133,6 +133,14 @@ export interface Store {
   setPurchaseComment(purchaseId: number, comment: string): Promise<void>;
   /** `pending` purchases and transfers, oldest first. */
   listPendingPurchases(userId: number, limit: number): Promise<StoredPurchase[]>;
+  countPendingPurchases(userId: number): Promise<number>;
+  /** `unmatched` events the user has not answered, oldest first. */
+  listUnmatchedEvents(userId: number): Promise<StoredEvent[]>;
+  /**
+   * Events received since `since` that the user said are not purchases, oldest first: NON-PURCHASE
+   * on an unmatched event, or `🚫 Not a purchase` on a purchase a classifier rule extracted.
+   */
+  listExcludedEvents(userId: number, since: Date): Promise<StoredEvent[]>;
 
   /** Enabled user rules. Rows that no longer validate against the rule schema are skipped. */
   listUserRules(userId: number): Promise<Rule[]>;
@@ -185,4 +193,10 @@ export interface Messenger {
 
 export interface Clock {
   now(): Date;
+}
+
+/** Runs jobs on a cron schedule read in a time zone (Cron Triggers on Cloudflare, node-cron). */
+export interface Scheduler {
+  /** `job` receives the time the run was scheduled for. */
+  schedule(cron: string, timeZone: string, job: (now: Date) => Promise<void>): void;
 }

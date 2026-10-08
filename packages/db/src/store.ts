@@ -12,7 +12,7 @@ import {
   type StoredPurchase,
   type User,
 } from "@denarii/core";
-import { and, asc, between, count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, between, count, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase, SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as schema from "./schema";
 
@@ -163,6 +163,47 @@ export function createStore(db: Database): Store {
         .orderBy(asc(schema.purchases.occurredAt), asc(schema.purchases.id))
         .limit(limit);
       return rows.map(toPurchase);
+    },
+
+    async countPendingPurchases(userId) {
+      const [row] = await db
+        .select({ count: count() })
+        .from(schema.purchases)
+        .where(and(eq(schema.purchases.userId, userId), eq(schema.purchases.status, "pending")));
+      return row?.count ?? 0;
+    },
+
+    async listUnmatchedEvents(userId) {
+      const rows = await db
+        .select()
+        .from(schema.events)
+        .where(and(eq(schema.events.userId, userId), eq(schema.events.status, "unmatched")))
+        .orderBy(asc(schema.events.receivedAt), asc(schema.events.id));
+      return rows.map(toEvent);
+    },
+
+    async listExcludedEvents(userId, since) {
+      const rows = await db
+        .select({ event: schema.events })
+        .from(schema.events)
+        .leftJoin(schema.purchases, eq(schema.purchases.id, schema.events.purchaseId))
+        .where(
+          and(
+            eq(schema.events.userId, userId),
+            gte(schema.events.receivedAt, since.toISOString()),
+            or(
+              eq(schema.events.status, "non_purchase"),
+              and(
+                eq(schema.events.status, "purchase"),
+                isNotNull(schema.events.ruleId),
+                eq(schema.purchases.kind, "purchase"),
+                eq(schema.purchases.status, "excluded"),
+              ),
+            ),
+          ),
+        )
+        .orderBy(asc(schema.events.receivedAt), asc(schema.events.id));
+      return rows.map((row) => toEvent(row.event));
     },
 
     async updatePurchaseExtraction(purchaseId: number, extraction: PurchaseExtraction) {

@@ -378,7 +378,7 @@ Where each diagram box lives in the code. *Planned* boxes have no code yet.
 | Categorizer | Merchant rule lookup in `announcePurchase` ([`packages/core/src/bot/flows.ts`](packages/core/src/bot/flows.ts)), [`packages/core/src/normalize.ts`](packages/core/src/normalize.ts) |
 | Telegram flows | [`packages/core/src/bot/`](packages/core/src/bot/) ([`flows.ts`](packages/core/src/bot/flows.ts), [`views.ts`](packages/core/src/bot/views.ts), [`callback-data.ts`](packages/core/src/bot/callback-data.ts), [`manual-purchase.ts`](packages/core/src/bot/manual-purchase.ts)), strings in [`packages/core/src/i18n.ts`](packages/core/src/i18n.ts) |
 | Telegram (Bot API) | `Messenger` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), implemented by [`packages/api/src/telegram.ts`](packages/api/src/telegram.ts) |
-| Scheduler | *Planned* |
+| Scheduler | `Scheduler` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), digest in [`packages/core/src/digest.ts`](packages/core/src/digest.ts), Cron Trigger tick in [`packages/api/src/scheduler.ts`](packages/api/src/scheduler.ts) and [`packages/api/src/scheduled.ts`](packages/api/src/scheduled.ts) |
 | LLM provider | *Planned*: `packages/llm/` |
 | Store, SQLite | `Store` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), implemented by [`packages/db/src/store.ts`](packages/db/src/store.ts). Schema [`packages/db/src/schema.ts`](packages/db/src/schema.ts), migrations [`packages/db/migrations/`](packages/db/migrations/) |
 
