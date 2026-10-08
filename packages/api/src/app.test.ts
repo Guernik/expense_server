@@ -48,7 +48,7 @@ function setup(locale: "en" | "es" = "es") {
       body: JSON.stringify(update),
     });
 
-  return { db, sent, ingest, telegram, settled };
+  return { app, db, sent, ingest, telegram, settled };
 }
 
 const GALICIA_PURCHASE = {
@@ -63,6 +63,11 @@ describe("POST /api/ingest", () => {
     expect((await ingest(GALICIA_PURCHASE, "")).status).toBe(401);
     expect((await ingest(GALICIA_PURCHASE, "wrong-secret-wrong-secret")).status).toBe(401);
     expect(db.select().from(schema.events).all()).toHaveLength(0);
+  });
+
+  it("checks the secret before validating the body", async () => {
+    const { ingest } = setup();
+    expect((await ingest({ title: 1 }, "")).status).toBe(401);
   });
 
   it("rejects a malformed body", async () => {
@@ -153,5 +158,22 @@ describe("POST /api/telegram", () => {
     expect(sent).toEqual([
       { chatId: "42", text: "denarii está funcionando. Tus compras van a aparecer acá." },
     ]);
+  });
+});
+
+describe("OpenAPI", () => {
+  it("serves the spec", async () => {
+    const { app } = setup();
+    const response = await app.request("/api/openapi.json");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ openapi: "3.1.0" });
+  });
+
+  it("matches the committed docs/api/openapi.json (update with `npm run openapi -w @denarii/api`)", async () => {
+    const { app } = setup();
+    const spec = await (await app.request("/api/openapi.json")).json();
+    await expect(`${JSON.stringify(spec, null, 2)}\n`).toMatchFileSnapshot(
+      "../../../docs/api/openapi.json",
+    );
   });
 });

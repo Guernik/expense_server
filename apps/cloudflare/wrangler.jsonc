@@ -4,12 +4,15 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
-  "routes": [{ "pattern": "denarii.emilioguernik.com", "custom_domain": true }],
+  // workers.dev until emilioguernik.com moves to Cloudflare; then:
+  // "routes": [{ "pattern": "denarii.emilioguernik.com", "custom_domain": true }]
+  "workers_dev": true,
+  "preview_urls": false,
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "denarii",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "d2a9489e-766b-49e6-babd-de24c5beac48",
       "migrations_dir": "../../packages/db/migrations"
     }
   ],

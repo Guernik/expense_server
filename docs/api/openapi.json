@@ -1,0 +1,220 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "denarii API",
+    "version": "0.1.0",
+    "description": "Ingests payment notifications and receives Telegram bot updates. See SPEC.md §4 and §7."
+  },
+  "components": {
+    "securitySchemes": {
+      "webhookSecret": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Webhook-Secret",
+        "description": "`WEBHOOK_SECRET`, configured in the MacroDroid HTTP action."
+      },
+      "telegramSecret": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Telegram-Bot-Api-Secret-Token",
+        "description": "`TELEGRAM_WEBHOOK_SECRET`, sent by Telegram as set with `setWebhook`."
+      }
+    },
+    "schemas": {
+      "IngestAccepted": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "example": 1
+          }
+        },
+        "required": [
+          "event_id"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "IngestRequest": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "default": "",
+            "description": "Originating app name (MacroDroid `[notification_app_name]`). Informational.",
+            "example": "Galicia"
+          },
+          "title": {
+            "type": "string",
+            "description": "Notification title.",
+            "example": "Pagaste $15.000,01"
+          },
+          "text": {
+            "type": "string",
+            "description": "Notification text.",
+            "example": "A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 22:32."
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the phone received the notification. Defaults to server receive time.",
+            "example": "2026-10-05T22:32:10-03:00"
+          }
+        },
+        "required": [
+          "title",
+          "text"
+        ]
+      },
+      "TelegramUpdate": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "object",
+            "properties": {
+              "chat": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": {}
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "chat"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "additionalProperties": {},
+        "description": "Subset of a Telegram Bot API `Update` that denarii reads. Other fields are ignored."
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/ingest": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Ingest a notification",
+        "description": "Stores the notification as an event and returns immediately. Classification, purchase recording and the Telegram message happen asynchronously.",
+        "security": [
+          {
+            "webhookSecret": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Event stored; processing continues in the background",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Body is not valid JSON or fails validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong secret header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telegram": {
+      "post": {
+        "tags": [
+          "Telegram"
+        ],
+        "summary": "Telegram webhook",
+        "description": "Receives bot updates (registered with `setWebhook`). Updates from chats other than `TELEGRAM_CHAT_ID` are acknowledged and dropped.",
+        "security": [
+          {
+            "telegramSecret": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Update handled or ignored"
+          },
+          "400": {
+            "description": "Body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong secret header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}
