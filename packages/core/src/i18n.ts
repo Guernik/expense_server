@@ -41,6 +41,11 @@ const en = {
   confirm: "Confirm",
   cancel: "Cancel",
   ignoreRuleSaved: "🔇 Similar notifications will be ignored.",
+  help: "Commands:\n/pending - re-send the prompts of pending purchases and transfers\n/setgroup <category> <group> - move a category to a group\n/help - this list\n\nReply to a purchase message to set its comment.",
+  nothingPending: "Nothing pending.",
+  setGroupUsage: "Usage: /setgroup <category> <group>, e.g. /setgroup Delivery Food",
+  unknownCategory: "There is no category named {name}.",
+  categoryMoved: "{category} is now in {group}.",
 };
 
 const es: typeof en = {
@@ -82,6 +87,11 @@ const es: typeof en = {
   confirm: "Confirmar",
   cancel: "Cancelar",
   ignoreRuleSaved: "🔇 Las notificaciones similares se van a ignorar.",
+  help: "Comandos:\n/pending - reenvía las preguntas de compras y transferencias pendientes\n/setgroup <categoría> <grupo> - mueve una categoría a un grupo\n/help - esta lista\n\nRespondé a un mensaje de una compra para guardar un comentario.",
+  nothingPending: "No hay nada pendiente.",
+  setGroupUsage: "Uso: /setgroup <categoría> <grupo>, por ejemplo /setgroup Delivery Comida",
+  unknownCategory: "No hay ninguna categoría llamada {name}.",
+  categoryMoved: "{category} ahora está en {group}.",
 };
 
 const MESSAGES: Record<Locale, typeof en> = { en, es };

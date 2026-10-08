@@ -63,8 +63,10 @@ const TelegramUpdate = z
   .looseObject({
     message: z
       .looseObject({
+        message_id: z.number().int(),
         chat: TelegramChat,
         text: z.string().optional(),
+        reply_to_message: z.looseObject({ message_id: z.number().int() }).optional(),
       })
       .optional(),
     callback_query: z
@@ -229,7 +231,12 @@ function toBotInput(update: z.infer<typeof TelegramUpdate>, chatId: string): Bot
     };
   }
   if (message?.text !== undefined && String(message.chat.id) === chatId) {
-    return { kind: "text", text: message.text };
+    return {
+      kind: "text",
+      text: message.text,
+      messageId: message.message_id,
+      ...(message.reply_to_message && { replyToMessageId: message.reply_to_message.message_id }),
+    };
   }
   return null;
 }

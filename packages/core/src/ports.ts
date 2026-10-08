@@ -71,6 +71,7 @@ export interface StoredPurchase extends Omit<NewPurchase, "sourceEventId"> {
   status: PurchaseStatus;
   categoryId: number | null;
   paymentMethod: string | null;
+  comment: string | null;
   telegramMessageId: number | null;
 }
 
@@ -126,6 +127,12 @@ export interface Store {
   categorizePurchase(purchaseId: number, categoryId: number, by: CategorizedBy): Promise<void>;
   /** Marks the purchase `excluded`: kept, not counted. */
   excludePurchase(purchaseId: number): Promise<void>;
+  /** The purchase whose current Telegram message is `messageId`. */
+  findPurchaseByTelegramMessage(userId: number, messageId: number): Promise<StoredPurchase | null>;
+  /** Sets or overwrites the purchase's comment. */
+  setPurchaseComment(purchaseId: number, comment: string): Promise<void>;
+  /** `pending` purchases and transfers, oldest first. */
+  listPendingPurchases(userId: number, limit: number): Promise<StoredPurchase[]>;
 
   /** Enabled user rules. Rows that no longer validate against the rule schema are skipped. */
   listUserRules(userId: number): Promise<Rule[]>;
@@ -137,6 +144,8 @@ export interface Store {
   getCategory(userId: number, categoryId: number): Promise<Category | null>;
   findCategoryByName(userId: number, name: string): Promise<Category | null>;
   createCategory(userId: number, name: string, groupId: number): Promise<Category>;
+  /** Moves a category to another group. Purchases are untouched: their group is derived. */
+  setCategoryGroup(categoryId: number, groupId: number): Promise<void>;
   /** All categories, ordered by group name then category name. */
   listCategories(userId: number): Promise<Category[]>;
   /** Categories by number of categorized purchases since `since`, most used first, then by name. */
@@ -170,6 +179,8 @@ export interface Messenger {
   edit(chatId: string, messageId: number, text: string, keyboard?: Keyboard): Promise<void>;
   /** Acknowledges a button tap, optionally with a short toast. */
   answerCallback(callbackId: string, text?: string): Promise<void>;
+  /** Marks a message from the user as handled (SPEC §7.2: the bot reacts ✅). */
+  acknowledge(chatId: string, messageId: number): Promise<void>;
 }
 
 export interface Clock {
