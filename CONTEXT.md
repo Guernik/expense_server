@@ -44,7 +44,7 @@ Exact mapping from `merchant_normalized` to a category. Created or updated autom
 An LLM-proposed category for a purchase. Never applied without user confirmation.
 
 **Dedupe**
-Merges events that describe the same purchase: same amount and currency, `received_at` within ±30 seconds (see ADR-0011).
+Merges events that describe the same purchase: same amount and currency, `received_at` within ±10 seconds (see ADR-0014).
 
 **Digest**
 Daily Telegram summary of pending purchases, unanswered unmatched events, and possible classifier misses. Only sent when non-empty.

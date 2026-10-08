@@ -31,7 +31,7 @@ NODES = {
     "scheduler":   dict(box=(640, 520, 150, 50),  title="Scheduler",      sub="daily digest"),
     # core
     "classifier":  dict(box=(460, 250, 110, 56),  title="Classifier",     sub="regex rules", style="hl"),
-    "dedupe":      dict(box=(640, 250, 100, 56),  title="Dedupe",         sub="±30 s"),
+    "dedupe":      dict(box=(640, 250, 100, 56),  title="Dedupe",         sub="±10 s"),
     "categorizer": dict(box=(800, 250, 115, 56),  title="Categorizer",    sub="merchant rules"),
     "flows":       dict(box=(640, 380, 150, 56),  title="Telegram flows", sub="prompts · commands"),
     # outside

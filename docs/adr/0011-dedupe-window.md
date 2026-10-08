@@ -1,6 +1,6 @@
 # ADR-0011: Dedupe by amount + currency within 30 seconds
 
-Status: Accepted (2026-10-05)
+Status: Superseded by ADR-0014
 
 ## Context
 MacroDroid can fire twice for one notification. One payment can also produce notifications from two apps (e.g. Mercado Pago and the card issuer).
