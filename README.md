@@ -4,7 +4,4 @@ Codename **denarii**. Turns phone payment notifications into categorized expense
 
 ## Architecture
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/architecture-dark.png">
-  <img alt="denarii architecture" src="docs/diagrams/architecture-light.png">
-</picture>
+![denarii architecture](docs/diagrams/architecture-light.png)

@@ -363,6 +363,25 @@ Calls time out at 10s. Any failure degrades to the no-LLM path.
   <img alt="denarii architecture" src="docs/diagrams/architecture-light.png">
 </picture>
 
+Where each diagram box lives in the code. *Planned* boxes have no code yet.
+
+| Diagram | Code |
+|---|---|
+| Notification, MacroDroid | *Planned*: `macrodroid/`. Payload in §13.4 |
+| Denarii runtime | `apps/cloudflare/src/index.ts`, `apps/cloudflare/wrangler.jsonc`. Node: *planned* (`apps/node/`) |
+| Hono API | `packages/api/src/app.ts` (`/api/ingest`, `/api/telegram`). tRPC: *planned* |
+| React SPA | *Planned*: `apps/web/` |
+| Google OAuth | *Planned*: Better Auth (ADR-0008) |
+| Rule packs | `rules/<country>/<provider>.yaml`, bundled by `rules/index.ts`, loaded by `packages/api/src/rules.ts` |
+| Classifier | `packages/core/src/rules/engine.ts` (`classify`), `rules/schema.ts`, `rules/ignore-similar.ts` (user rules). Driven by `packages/core/src/process-event.ts` |
+| Dedupe | `packages/core/src/dedupe.ts`, `insertPurchase` in `packages/db/src/store.ts` |
+| Categorizer | Merchant rule lookup in `announcePurchase` (`packages/core/src/bot/flows.ts`), `packages/core/src/normalize.ts` |
+| Telegram flows | `packages/core/src/bot/` (`flows.ts`, `views.ts`, `callback-data.ts`, `manual-purchase.ts`), strings in `packages/core/src/i18n.ts` |
+| Telegram (Bot API) | `Messenger` port in `packages/core/src/ports.ts`, implemented by `packages/api/src/telegram.ts` |
+| Scheduler | *Planned* |
+| LLM provider | *Planned*: `packages/llm/` |
+| Store, SQLite | `Store` port in `packages/core/src/ports.ts`, implemented by `packages/db/src/store.ts`. Schema `packages/db/src/schema.ts`, migrations `packages/db/migrations/` |
+
 Nx + npm workspaces.
 
 ```
