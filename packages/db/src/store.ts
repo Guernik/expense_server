@@ -1,15 +1,16 @@
-import type {
-  Category,
-  ChatState,
-  EventClassification,
-  NewEvent,
-  NewPurchase,
-  PurchaseExtraction,
-  PurchaseInsert,
-  Store,
-  StoredEvent,
-  StoredPurchase,
-  User,
+import {
+  type Category,
+  type ChatState,
+  type EventClassification,
+  type NewEvent,
+  type NewPurchase,
+  type PurchaseExtraction,
+  type PurchaseInsert,
+  ruleSchema,
+  type Store,
+  type StoredEvent,
+  type StoredPurchase,
+  type User,
 } from "@denarii/core";
 import { and, asc, between, count, desc, eq, gte, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase, SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -38,8 +39,25 @@ export function createStore(db: Database): Store {
         .insert(schema.events)
         .values({ ...event, receivedAt: event.receivedAt.toISOString() })
         .returning();
-      const stored = required(row);
-      return { ...event, id: stored.id, status: stored.status };
+      return toEvent(required(row));
+    },
+
+    async getEvent(userId, eventId) {
+      const [row] = await db
+        .select()
+        .from(schema.events)
+        .where(and(eq(schema.events.userId, userId), eq(schema.events.id, eventId)));
+      return row ? toEvent(row) : null;
+    },
+
+    async findPurchaseEvent(userId, purchaseId) {
+      const [row] = await db
+        .select()
+        .from(schema.events)
+        .where(and(eq(schema.events.userId, userId), eq(schema.events.purchaseId, purchaseId)))
+        .orderBy(asc(schema.events.id))
+        .limit(1);
+      return row ? toEvent(row) : null;
     },
 
     async classifyEvent(eventId: number, c: EventClassification) {
@@ -50,6 +68,7 @@ export function createStore(db: Database): Store {
           ruleId: c.ruleId ?? null,
           ruleSource: c.ruleSource ?? null,
           purchaseId: c.purchaseId ?? null,
+          extractedBy: c.extractedBy ?? null,
         })
         .where(eq(schema.events.id, eventId));
     },
@@ -110,15 +129,7 @@ export function createStore(db: Database): Store {
       return {
         created: false,
         purchase: required(await this.getPurchase(p.userId, p.id)),
-        sourceEvent: {
-          id: e.id,
-          userId: e.userId,
-          app: e.app,
-          title: e.title,
-          text: e.text,
-          receivedAt: new Date(e.receivedAt),
-          status: e.status,
-        },
+        sourceEvent: toEvent(e),
       };
     },
 
@@ -167,6 +178,33 @@ export function createStore(db: Database): Store {
         .update(schema.purchases)
         .set({ categoryId, categorizedBy: by, status: "categorized" })
         .where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async excludePurchase(purchaseId) {
+      await db
+        .update(schema.purchases)
+        .set({ status: "excluded" })
+        .where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async listUserRules(userId) {
+      const rows = await db
+        .select({ definition: schema.classifierRules.definition })
+        .from(schema.classifierRules)
+        .where(
+          and(eq(schema.classifierRules.userId, userId), eq(schema.classifierRules.enabled, true)),
+        )
+        .orderBy(asc(schema.classifierRules.id));
+      return rows.flatMap((row) => {
+        const result = ruleSchema.safeParse(row.definition);
+        return result.success ? [result.data] : [];
+      });
+    },
+
+    async insertUserRule(userId, rule, createdFromEventId) {
+      await db
+        .insert(schema.classifierRules)
+        .values({ userId, definition: rule, createdFromEventId });
     },
 
     async listGroups(userId) {
@@ -308,6 +346,19 @@ function toCategory(row: {
 /** Case-insensitive name match (ASCII), so "delivery" finds "Delivery". */
 function sameName(column: SQLiteColumn, name: string) {
   return sql`${column} = ${name} COLLATE NOCASE`;
+}
+
+function toEvent(row: typeof schema.events.$inferSelect): StoredEvent {
+  return {
+    id: row.id,
+    userId: row.userId,
+    app: row.app,
+    title: row.title,
+    text: row.text,
+    receivedAt: new Date(row.receivedAt),
+    status: row.status,
+    purchaseId: row.purchaseId,
+  };
 }
 
 function toUser(row: typeof schema.users.$inferSelect): User {

@@ -160,7 +160,24 @@ export const events = sqliteTable(
     ruleId: text("rule_id"),
     ruleSource: text("rule_source", { enum: ["pack", "user"] }),
     purchaseId: integer("purchase_id").references(() => purchases.id),
+    extractedBy: text("extracted_by", { enum: ["regex", "llm", "user"] }),
     createdAt: createdAt(),
   },
   (t) => [index("events_user_received").on(t.userId, t.receivedAt)],
+);
+
+/** User rules (ADR-0003): the pack rule schema stored as JSON, evaluated before packs. */
+export const classifierRules = sqliteTable(
+  "classifier_rules",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    definition: text("definition", { mode: "json" }).notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    createdFromEventId: integer("created_from_event_id").references(() => events.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("classifier_rules_user").on(t.userId)],
 );

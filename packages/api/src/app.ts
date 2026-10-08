@@ -166,7 +166,7 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
         receivedAt: body.received_at ? new Date(body.received_at) : runtime.clock.now(),
       });
 
-      const deps = { ...runtime, rules: loadRules(config.RULE_PACKS) };
+      const deps = { ...runtime, packRules: loadRules(config.RULE_PACKS) };
       runtime.defer(
         processEvent(deps, user, event).catch((error: unknown) => {
           console.error(`Processing event ${event.id} failed`, error);

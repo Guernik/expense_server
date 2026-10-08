@@ -1,5 +1,6 @@
 import type { Locale } from "./i18n";
 import type { Currency } from "./money";
+import type { Rule } from "./rules/schema";
 
 /** Interfaces the core depends on. Runtimes (Cloudflare, Node) provide implementations. */
 
@@ -15,6 +16,7 @@ export type EventStatus =
 export type PurchaseKind = "purchase" | "transfer";
 export type PurchaseStatus = "pending" | "categorized" | "excluded";
 export type RuleSource = "pack" | "user";
+export type ExtractedBy = "regex" | "llm" | "user";
 export type CategorizedBy = "rule" | "user" | "import";
 export type MerchantRuleSource = "user" | "import";
 
@@ -36,6 +38,7 @@ export interface NewEvent {
 export interface StoredEvent extends NewEvent {
   id: number;
   status: EventStatus;
+  purchaseId: number | null;
 }
 
 export interface NewPurchase {
@@ -87,19 +90,25 @@ export interface Category {
 export type ChatState =
   | { step: "awaiting_category_name"; purchaseId: number }
   /** Group buttons are shown too; a tap answers it as well as free text. */
-  | { step: "awaiting_group_name"; purchaseId: number; categoryName: string };
+  | { step: "awaiting_group_name"; purchaseId: number; categoryName: string }
+  /** `<amount> <merchant>` typed after PURCHASE on an unmatched event (SPEC §7.3). */
+  | { step: "awaiting_manual_extraction"; eventId: number; messageId: number };
 
 export interface EventClassification {
   status: EventStatus;
   ruleId?: string;
   ruleSource?: RuleSource;
   purchaseId?: number;
+  extractedBy?: ExtractedBy;
 }
 
 export interface Store {
   /** Returns the user for this Telegram chat, creating it on first use. */
   ensureUser(user: Omit<User, "id">): Promise<User>;
   insertEvent(event: NewEvent): Promise<StoredEvent>;
+  getEvent(userId: number, eventId: number): Promise<StoredEvent | null>;
+  /** The first event linked to a purchase. */
+  findPurchaseEvent(userId: number, purchaseId: number): Promise<StoredEvent | null>;
   classifyEvent(eventId: number, classification: EventClassification): Promise<void>;
   /** Returns the payment method id for this label, creating it on first sight. */
   upsertPaymentMethod(userId: number, label: string): Promise<number>;
@@ -113,6 +122,12 @@ export interface Store {
   setPurchaseTelegramMessage(purchaseId: number, messageId: number): Promise<void>;
   /** Sets the category and marks the purchase `categorized`. */
   categorizePurchase(purchaseId: number, categoryId: number, by: CategorizedBy): Promise<void>;
+  /** Marks the purchase `excluded`: kept, not counted. */
+  excludePurchase(purchaseId: number): Promise<void>;
+
+  /** Enabled user rules. Rows that no longer validate against the rule schema are skipped. */
+  listUserRules(userId: number): Promise<Rule[]>;
+  insertUserRule(userId: number, rule: Rule, createdFromEventId: number | null): Promise<void>;
 
   listGroups(userId: number): Promise<Group[]>;
   /** Returns the group with this name (case-insensitive), creating it if missing. */
