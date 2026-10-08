@@ -219,14 +219,16 @@ describe("POST /api/telegram", () => {
 
   it("ignores chats other than the configured one", async () => {
     const { messages, telegram } = setup();
-    const response = await telegram({ message: { chat: { id: 7 }, text: "/start" } });
+    const response = await telegram({
+      message: { message_id: 1, chat: { id: 7 }, text: "/start" },
+    });
     expect(response.status).toBe(200);
     expect(messages).toHaveLength(0);
   });
 
   it("answers /start in the configured chat", async () => {
     const { messages, telegram } = setup("es");
-    await telegram({ message: { chat: { id: 42 }, text: "/start" } });
+    await telegram({ message: { message_id: 1, chat: { id: 42 }, text: "/start" } });
     expect(messages).toMatchObject([
       { chatId: "42", text: "denarii está funcionando. Tus compras van a aparecer acá." },
     ]);
