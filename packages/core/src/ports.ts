@@ -92,6 +92,8 @@ export type ChatState =
   | { step: "awaiting_category_name"; purchaseId: number }
   /** Group buttons are shown too; a tap answers it as well as free text. */
   | { step: "awaiting_group_name"; purchaseId: number; categoryName: string }
+  /** Description typed after `💸 Expense` on a transfer; it becomes the merchant (SPEC §7.4). */
+  | { step: "awaiting_transfer_description"; purchaseId: number }
   /** `<amount> <merchant>` typed after PURCHASE on an unmatched event (SPEC §7.3). */
   | { step: "awaiting_manual_extraction"; eventId: number; messageId: number };
 

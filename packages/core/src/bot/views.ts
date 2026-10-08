@@ -31,6 +31,32 @@ export function excludedText(user: User, purchase: StoredPurchase): string {
   return t(user.locale, "purchaseExcluded", headerParams(user, purchase));
 }
 
+/** SPEC §7.4: `↗️ Transfer amount` / time. */
+export function transferText(user: User, purchase: StoredPurchase): string {
+  const { amount, time } = headerParams(user, purchase);
+  return t(user.locale, "transferNotice", { amount, time });
+}
+
+/** SPEC §7.4 after `↔️ Not an expense`: the transfer notice followed by the answer. */
+export function transferNotExpenseText(user: User, purchase: StoredPurchase): string {
+  return `${transferText(user, purchase)}\n\n${t(user.locale, "transferNotExpense")}`;
+}
+
+export function transferKeyboard(locale: Locale, purchaseId: number): Keyboard {
+  return [
+    [
+      {
+        text: t(locale, "transferExpense"),
+        data: encodeAction({ type: "transferExpense", purchaseId }),
+      },
+      {
+        text: t(locale, "transferNotExpense"),
+        data: encodeAction({ type: "transferNotExpense", purchaseId }),
+      },
+    ],
+  ];
+}
+
 /** SPEC §7.3: `❓ Unrecognized notification (app)` / "title" / "text". */
 export function unmatchedText(user: User, event: StoredEvent): string {
   const app = normalizeText(event.app);
@@ -68,6 +94,10 @@ export function confirmRuleKeyboard(locale: Locale, eventId: number): Keyboard {
   ];
 }
 
+export function amountLabel(user: User, purchase: StoredPurchase): string {
+  return formatMoney(purchase.amountMinor, purchase.currency, INTL_LOCALE[user.locale]);
+}
+
 function headerParams(user: User, purchase: StoredPurchase, category?: string) {
   const intlLocale = INTL_LOCALE[user.locale];
   const time = new Intl.DateTimeFormat(intlLocale, {
@@ -77,7 +107,8 @@ function headerParams(user: User, purchase: StoredPurchase, category?: string) {
     hourCycle: "h23",
   }).format(purchase.occurredAt);
   return {
-    amount: formatMoney(purchase.amountMinor, purchase.currency, intlLocale),
+    amount: amountLabel(user, purchase),
+    time,
     merchant: purchase.merchantRaw,
     details: [category, purchase.paymentMethod, time].filter(Boolean).join(" · "),
   };

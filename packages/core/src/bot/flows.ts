@@ -1,6 +1,5 @@
 import { dedupeWindow } from "../dedupe";
-import { INTL_LOCALE, t } from "../i18n";
-import { formatMoney } from "../money";
+import { t } from "../i18n";
 import { normalizeMerchant, normalizeText } from "../normalize";
 import type {
   Category,
@@ -18,6 +17,7 @@ import { type Action, decodeAction } from "./callback-data";
 import { type Command, parseCommand, splitSetGroupArgs } from "./commands";
 import { parseManualPurchase } from "./manual-purchase";
 import {
+  amountLabel,
   categoryLabel,
   confirmationKeyboard,
   confirmationText,
@@ -29,6 +29,9 @@ import {
   pickerKeyboard,
   pickerText,
   TOP_CATEGORIES,
+  transferKeyboard,
+  transferNotExpenseText,
+  transferText,
   unmatchedKeyboard,
   unmatchedText,
 } from "./views";
@@ -90,23 +93,16 @@ export async function announcePurchase(
   await store.setPurchaseTelegramMessage(purchase.id, sent.messageId);
 }
 
-/** SPEC §7.4: the transfer notice. */
+/** SPEC §7.4: asks whether a transfer is an expense. */
 export async function announceTransfer(
   deps: BotDeps,
   user: User,
   purchase: StoredPurchase,
 ): Promise<void> {
-  const intlLocale = INTL_LOCALE[user.locale];
-  const time = new Intl.DateTimeFormat(intlLocale, {
-    timeZone: user.timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(purchase.occurredAt);
-  const amount = formatMoney(purchase.amountMinor, purchase.currency, intlLocale);
   const { messageId } = await deps.messenger.send(
     user.telegramChatId,
-    t(user.locale, "transferNotice", { amount, time }),
+    transferText(user, purchase),
+    transferKeyboard(user.locale, purchase.id),
   );
   await deps.store.setPurchaseTelegramMessage(purchase.id, messageId);
 }
@@ -188,6 +184,24 @@ async function handleCallback(
       );
       return answer();
     }
+    case "transferExpense":
+    case "transferNotExpense":
+      if (purchase.kind !== "transfer" || purchase.status !== "pending") return answer();
+      if (action.type === "transferExpense") {
+        await setState(deps, user, {
+          step: "awaiting_transfer_description",
+          purchaseId: purchase.id,
+        });
+        await messenger.send(
+          chatId,
+          t(user.locale, "askTransferDescription", { amount: amountLabel(user, purchase) }),
+        );
+        return answer();
+      }
+      await store.clearChatState(chatId);
+      await store.excludePurchase(purchase.id);
+      await messenger.edit(chatId, input.messageId, transferNotExpenseText(user, purchase));
+      return answer();
     case "skip":
       await store.clearChatState(chatId);
       await messenger.edit(chatId, input.messageId, pickerText(user, purchase));
@@ -401,6 +415,13 @@ async function handleText(
     return;
   }
 
+  if (state.step === "awaiting_transfer_description") {
+    await store.clearChatState(chatId);
+    if (purchase.kind !== "transfer" || purchase.status !== "pending") return;
+    await describeTransfer(deps, user, purchase, name);
+    return;
+  }
+
   if (state.step === "awaiting_category_name") {
     const existing = await store.findCategoryByName(user.id, name);
     if (existing) {
@@ -496,6 +517,38 @@ async function setGroup(deps: BotDeps, user: User, args: string): Promise<void> 
     chatId,
     t(locale, "categoryMoved", { category: split.category.name, group: group.name }),
   );
+}
+
+/**
+ * The transfer description becomes its merchant, then the transfer message turns into the category
+ * picker. Transfers never create merchant rules (`canHaveMerchantRule`).
+ */
+async function describeTransfer(
+  deps: BotDeps,
+  user: User,
+  transfer: StoredPurchase,
+  description: string,
+): Promise<void> {
+  const { store, messenger } = deps;
+  const described: StoredPurchase = {
+    ...transfer,
+    merchantRaw: description,
+    merchantNormalized: normalizeMerchant(description),
+  };
+  await store.updatePurchaseExtraction(transfer.id, {
+    kind: described.kind,
+    merchantRaw: described.merchantRaw,
+    merchantNormalized: described.merchantNormalized,
+    paymentMethodId: described.paymentMethodId,
+  });
+  const text = pickerText(user, described);
+  const keyboard = pickerKeyboard(user.locale, described.id, await topCategories(deps, user));
+  if (described.telegramMessageId !== null) {
+    await messenger.edit(user.telegramChatId, described.telegramMessageId, text, keyboard);
+  } else {
+    const { messageId } = await messenger.send(user.telegramChatId, text, keyboard);
+    await store.setPurchaseTelegramMessage(described.id, messageId);
+  }
 }
 
 /**
