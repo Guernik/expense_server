@@ -390,6 +390,7 @@ docker/        Dockerfile, docker-compose.yml
 - **API**: the MacroDroid and Telegram webhooks are plain Hono routes. The dashboard uses tRPC (`purchases.list`, `summary.byMonth`, `categories.list`, `paymentMethods.list`, … ; v2 adds mutations).
 - **Testing**: Vitest. Pack rule `tests` plus the fixture corpus run in CI. Core logic is tested against an in-memory SQLite Store.
 - **CI**: GitHub Actions, `nx affected` lint/typecheck/test. On tags it builds and pushes the image to GHCR.
+- **CD**: after CI passes on `main`, records a D1 Time Travel bookmark, applies D1 migrations and deploys the Worker.
 
 ## 13. Deployment and configuration
 

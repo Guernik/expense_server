@@ -1,0 +1,56 @@
+name: Deploy
+
+# Deploys main to Cloudflare after CI passes on it.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two deploys at once, and never cancel one halfway through a migration.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    defaults:
+      run:
+        working-directory: apps/cloudflare
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        working-directory: .
+
+      # D1 Time Travel is the backup: a bookmark of the pre-migration state, restorable with
+      # `wrangler d1 time-travel restore denarii --bookmark=<bookmark>`. Dumps are not uploaded
+      # as artifacts because the repo is public and the database holds personal data.
+      - name: Record pre-deploy D1 bookmark
+        run: |
+          bookmark=$(npx wrangler d1 time-travel info denarii --json | jq -r .bookmark)
+          echo "Pre-deploy D1 bookmark: \`$bookmark\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Restore with: \`npx wrangler d1 time-travel restore denarii --bookmark=$bookmark\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply D1 migrations
+        run: npm run migrate:remote
+
+      - name: Deploy Worker
+        run: npm run deploy
