@@ -85,7 +85,7 @@ describe("daily digest", () => {
   });
 
   it("only runs at DIGEST_CRON, read in TIMEZONE", async () => {
-    const h = setup("es", { DIGEST_CRON: "30 8 * * 1-5" });
+    const h = setup("es", { env: { DIGEST_CRON: "30 8 * * 1-5" } });
     await ingest(h, GALICIA_PURCHASE);
     // Thursday 2026-10-08 08:30 in Córdoba is 11:30 UTC.
     expect(await digest(h, new Date("2026-10-08T08:30:00Z"))).toEqual([]);

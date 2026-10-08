@@ -21,8 +21,10 @@
   "triggers": { "crons": ["* * * * *"] },
   // Rule packs are bundled as raw text.
   "rules": [{ "type": "Text", "globs": ["**/*.yaml"], "fallthrough": true }],
-  // Secrets (wrangler secret put / .dev.vars): WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN,
-  // TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET
+  // Secrets (wrangler secret put + .prod.vars; the dev bot's in .dev.vars): WEBHOOK_SECRET,
+  // TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET, and ANTHROPIC_API_KEY with
+  // LLM_PROVIDER=anthropic.
+  // Optional vars: LLM_PROVIDER (none | anthropic, default none), LLM_MODEL.
   "vars": {
     "RULE_PACKS": "ar.galicia,ar.mercadopago",
     "TIMEZONE": "America/Argentina/Cordoba",
