@@ -159,10 +159,10 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
 
   /** Checks a secret header before body validation, so unauthenticated callers learn nothing. */
   const requireSecret =
-    (header: string, expected: (config: Config) => string): MiddlewareHandler<E> =>
+    (header: string, expected: (config: Config) => string | undefined): MiddlewareHandler<E> =>
     async (c, next) => {
-      const { config } = resolve(c);
-      if (!safeEqual(c.req.header(header) ?? "", expected(config))) {
+      const secret = expected(resolve(c).config);
+      if (secret === undefined || !safeEqual(c.req.header(header) ?? "", secret)) {
         return c.json({ error: "unauthorized" }, 401);
       }
       await next();
@@ -211,9 +211,7 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
       ],
     },
     async (c) => {
-      const runtime = resolve(c);
-      const input = toBotInput(c.req.valid("json"), runtime.config.TELEGRAM_CHAT_ID);
-      if (input) await handleBotInput(runtime, await ensureUser(runtime), input);
+      await handleTelegramUpdate(resolve(c), c.req.valid("json"));
       return c.body(null, 200);
     },
   );
@@ -242,6 +240,17 @@ export function ensureUser({ store, config }: Pick<Runtime, "store" | "config">)
     locale: config.LOCALE,
     timezone: config.TIMEZONE,
   });
+}
+
+/**
+ * Handles one Telegram `Update`, from the webhook or from polling (`getUpdates`). Updates that
+ * aren't a text message or a button tap from `TELEGRAM_CHAT_ID` are dropped.
+ */
+export async function handleTelegramUpdate(runtime: Runtime, update: unknown): Promise<void> {
+  const parsed = TelegramUpdate.safeParse(update);
+  if (!parsed.success) return;
+  const input = toBotInput(parsed.data, runtime.config.TELEGRAM_CHAT_ID);
+  if (input) await handleBotInput(runtime, await ensureUser(runtime), input);
 }
 
 /** The bot only talks to the configured chat; everything else is acknowledged and dropped. */
