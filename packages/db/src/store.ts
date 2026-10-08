@@ -10,9 +10,10 @@ import {
   type Store,
   type StoredEvent,
   type StoredPurchase,
+  type Suggestion,
   type User,
 } from "@denarii/core";
-import { and, asc, between, count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, between, count, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase, SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as schema from "./schema";
 
@@ -134,32 +135,76 @@ export function createStore(db: Database): Store {
     },
 
     async getPurchase(userId, purchaseId) {
-      const [row] = await db
-        .select({ purchase: schema.purchases, paymentMethod: schema.paymentMethods.label })
-        .from(schema.purchases)
-        .leftJoin(
-          schema.paymentMethods,
-          eq(schema.paymentMethods.id, schema.purchases.paymentMethodId),
+      const [row] = await selectPurchases(db).where(
+        and(eq(schema.purchases.userId, userId), eq(schema.purchases.id, purchaseId)),
+      );
+      return row ? toPurchase(row) : null;
+    },
+
+    async findPurchaseByTelegramMessage(userId, messageId) {
+      const [row] = await selectPurchases(db)
+        .where(
+          and(
+            eq(schema.purchases.userId, userId),
+            eq(schema.purchases.telegramMessageId, messageId),
+          ),
         )
-        .where(and(eq(schema.purchases.userId, userId), eq(schema.purchases.id, purchaseId)));
-      if (!row) return null;
-      const { purchase: p } = row;
-      return {
-        id: p.id,
-        userId: p.userId,
-        kind: p.kind,
-        status: p.status,
-        occurredAt: new Date(p.occurredAt),
-        amountMinor: p.amountMinor,
-        currency: p.currency,
-        merchantRaw: p.merchantRaw,
-        merchantNormalized: p.merchantNormalized,
-        paymentMethodId: p.paymentMethodId,
-        sourceEventId: p.sourceEventId,
-        paymentMethod: row.paymentMethod,
-        categoryId: p.categoryId,
-        telegramMessageId: p.telegramMessageId,
-      };
+        .orderBy(desc(schema.purchases.id))
+        .limit(1);
+      return row ? toPurchase(row) : null;
+    },
+
+    async setPurchaseComment(purchaseId, comment) {
+      await db.update(schema.purchases).set({ comment }).where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async listPendingPurchases(userId, limit) {
+      const rows = await selectPurchases(db)
+        .where(and(eq(schema.purchases.userId, userId), eq(schema.purchases.status, "pending")))
+        .orderBy(asc(schema.purchases.occurredAt), asc(schema.purchases.id))
+        .limit(limit);
+      return rows.map(toPurchase);
+    },
+
+    async countPendingPurchases(userId) {
+      const [row] = await db
+        .select({ count: count() })
+        .from(schema.purchases)
+        .where(and(eq(schema.purchases.userId, userId), eq(schema.purchases.status, "pending")));
+      return row?.count ?? 0;
+    },
+
+    async listUnmatchedEvents(userId) {
+      const rows = await db
+        .select()
+        .from(schema.events)
+        .where(and(eq(schema.events.userId, userId), eq(schema.events.status, "unmatched")))
+        .orderBy(asc(schema.events.receivedAt), asc(schema.events.id));
+      return rows.map(toEvent);
+    },
+
+    async listExcludedEvents(userId, since) {
+      const rows = await db
+        .select({ event: schema.events })
+        .from(schema.events)
+        .leftJoin(schema.purchases, eq(schema.purchases.id, schema.events.purchaseId))
+        .where(
+          and(
+            eq(schema.events.userId, userId),
+            gte(schema.events.receivedAt, since.toISOString()),
+            or(
+              eq(schema.events.status, "non_purchase"),
+              and(
+                eq(schema.events.status, "purchase"),
+                isNotNull(schema.events.ruleId),
+                eq(schema.purchases.kind, "purchase"),
+                eq(schema.purchases.status, "excluded"),
+              ),
+            ),
+          ),
+        )
+        .orderBy(asc(schema.events.receivedAt), asc(schema.events.id));
+      return rows.map((row) => toEvent(row.event));
     },
 
     async updatePurchaseExtraction(purchaseId: number, extraction: PurchaseExtraction) {
@@ -185,6 +230,62 @@ export function createStore(db: Database): Store {
         .update(schema.purchases)
         .set({ status: "excluded" })
         .where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async setPurchaseSuggestion(purchaseId, suggestion) {
+      await db
+        .update(schema.purchases)
+        .set(
+          "categoryId" in suggestion
+            ? {
+                suggestedCategoryId: suggestion.categoryId,
+                suggestedCategoryName: null,
+                suggestedGroupName: null,
+              }
+            : {
+                suggestedCategoryId: null,
+                suggestedCategoryName: suggestion.categoryName,
+                suggestedGroupName: suggestion.groupName,
+              },
+        )
+        .where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async listUserCategorized(userId, limit) {
+      const rows = await db
+        .select({
+          merchant: schema.purchases.merchantRaw,
+          amountMinor: schema.purchases.amountMinor,
+          currency: schema.purchases.currency,
+          paymentMethod: schema.paymentMethods.label,
+          id: schema.categories.id,
+          name: schema.categories.name,
+          groupId: schema.groups.id,
+          groupName: schema.groups.name,
+        })
+        .from(schema.purchases)
+        .innerJoin(schema.categories, eq(schema.categories.id, schema.purchases.categoryId))
+        .innerJoin(schema.groups, eq(schema.groups.id, schema.categories.groupId))
+        .leftJoin(
+          schema.paymentMethods,
+          eq(schema.paymentMethods.id, schema.purchases.paymentMethodId),
+        )
+        .where(
+          and(
+            eq(schema.purchases.userId, userId),
+            eq(schema.purchases.status, "categorized"),
+            eq(schema.purchases.categorizedBy, "user"),
+          ),
+        )
+        .orderBy(desc(schema.purchases.updatedAt), desc(schema.purchases.id))
+        .limit(limit);
+      return rows.map((row) => ({
+        merchant: row.merchant,
+        amountMinor: row.amountMinor,
+        currency: row.currency,
+        paymentMethod: row.paymentMethod,
+        category: toCategory(row),
+      }));
     },
 
     async listUserRules(userId) {
@@ -248,6 +349,13 @@ export function createStore(db: Database): Store {
         .values({ userId, name, groupId })
         .returning({ id: schema.categories.id });
       return required(await this.getCategory(userId, required(row).id));
+    },
+
+    async setCategoryGroup(categoryId, groupId) {
+      await db
+        .update(schema.categories)
+        .set({ groupId })
+        .where(eq(schema.categories.id, categoryId));
     },
 
     async listCategories(userId) {
@@ -334,6 +442,39 @@ function selectCategories(db: Database) {
     .$dynamic();
 }
 
+function selectPurchases(db: Database) {
+  return db
+    .select({ purchase: schema.purchases, paymentMethod: schema.paymentMethods.label })
+    .from(schema.purchases)
+    .leftJoin(schema.paymentMethods, eq(schema.paymentMethods.id, schema.purchases.paymentMethodId))
+    .$dynamic();
+}
+
+function toPurchase(row: {
+  purchase: typeof schema.purchases.$inferSelect;
+  paymentMethod: string | null;
+}): StoredPurchase {
+  const { purchase: p } = row;
+  return {
+    id: p.id,
+    userId: p.userId,
+    kind: p.kind,
+    status: p.status,
+    occurredAt: new Date(p.occurredAt),
+    amountMinor: p.amountMinor,
+    currency: p.currency,
+    merchantRaw: p.merchantRaw,
+    merchantNormalized: p.merchantNormalized,
+    paymentMethodId: p.paymentMethodId,
+    sourceEventId: p.sourceEventId,
+    paymentMethod: row.paymentMethod,
+    categoryId: p.categoryId,
+    comment: p.comment,
+    telegramMessageId: p.telegramMessageId,
+    suggestion: toSuggestion(p),
+  };
+}
+
 function toCategory(row: {
   id: number;
   name: string;
@@ -346,6 +487,14 @@ function toCategory(row: {
 /** Case-insensitive name match (ASCII), so "delivery" finds "Delivery". */
 function sameName(column: SQLiteColumn, name: string) {
   return sql`${column} = ${name} COLLATE NOCASE`;
+}
+
+function toSuggestion(row: typeof schema.purchases.$inferSelect): Suggestion | null {
+  if (row.suggestedCategoryId !== null) return { categoryId: row.suggestedCategoryId };
+  if (row.suggestedCategoryName !== null && row.suggestedGroupName !== null) {
+    return { categoryName: row.suggestedCategoryName, groupName: row.suggestedGroupName };
+  }
+  return null;
 }
 
 function toEvent(row: typeof schema.events.$inferSelect): StoredEvent {

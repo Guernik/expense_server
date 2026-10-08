@@ -6,6 +6,8 @@ import { encodeAction } from "./callback-data";
 
 export const TOP_CATEGORIES = 6;
 export const MORE_PAGE_SIZE = 12;
+/** Longest category or group name the bot accepts. */
+export const MAX_NAME_LENGTH = 40;
 const BUTTONS_PER_ROW = 3;
 
 export function categoryLabel(category: Category): string {
@@ -29,6 +31,32 @@ export function confirmationText(user: User, purchase: StoredPurchase, category:
 /** SPEC §7.2b after `🚫 Not a purchase`: the picker header marked 🚫. */
 export function excludedText(user: User, purchase: StoredPurchase): string {
   return t(user.locale, "purchaseExcluded", headerParams(user, purchase));
+}
+
+/** SPEC §7.4: `↗️ Transfer amount` / time. */
+export function transferText(user: User, purchase: StoredPurchase): string {
+  const { amount, time } = headerParams(user, purchase);
+  return t(user.locale, "transferNotice", { amount, time });
+}
+
+/** SPEC §7.4 after `↔️ Not an expense`: the transfer notice followed by the answer. */
+export function transferNotExpenseText(user: User, purchase: StoredPurchase): string {
+  return `${transferText(user, purchase)}\n\n${t(user.locale, "transferNotExpense")}`;
+}
+
+export function transferKeyboard(locale: Locale, purchaseId: number): Keyboard {
+  return [
+    [
+      {
+        text: t(locale, "transferExpense"),
+        data: encodeAction({ type: "transferExpense", purchaseId }),
+      },
+      {
+        text: t(locale, "transferNotExpense"),
+        data: encodeAction({ type: "transferNotExpense", purchaseId }),
+      },
+    ],
+  ];
 }
 
 /** SPEC §7.3: `❓ Unrecognized notification (app)` / "title" / "text". */
@@ -68,6 +96,10 @@ export function confirmRuleKeyboard(locale: Locale, eventId: number): Keyboard {
   ];
 }
 
+export function amountLabel(user: User, purchase: StoredPurchase): string {
+  return formatMoney(purchase.amountMinor, purchase.currency, INTL_LOCALE[user.locale]);
+}
+
 function headerParams(user: User, purchase: StoredPurchase, category?: string) {
   const intlLocale = INTL_LOCALE[user.locale];
   const time = new Intl.DateTimeFormat(intlLocale, {
@@ -77,7 +109,8 @@ function headerParams(user: User, purchase: StoredPurchase, category?: string) {
     hourCycle: "h23",
   }).format(purchase.occurredAt);
   return {
-    amount: formatMoney(purchase.amountMinor, purchase.currency, intlLocale),
+    amount: amountLabel(user, purchase),
+    time,
     merchant: purchase.merchantRaw,
     details: [category, purchase.paymentMethod, time].filter(Boolean).join(" · "),
   };
@@ -87,9 +120,27 @@ export function confirmationKeyboard(locale: Locale, purchaseId: number): Keyboa
   return [[{ text: t(locale, "change"), data: encodeAction({ type: "picker", purchaseId }) }]];
 }
 
-/** Top categories, then `More…` `➕ New category`, then `🚫 Not a purchase` `Skip`. */
-export function pickerKeyboard(locale: Locale, purchaseId: number, top: Category[]): Keyboard {
+/**
+ * The LLM suggestion if any, then top categories, then `More…` `➕ New category`, then
+ * `🚫 Not a purchase` `Skip`.
+ */
+export function pickerKeyboard(
+  locale: Locale,
+  purchaseId: number,
+  top: Category[],
+  suggestion: { category: string; group: string } | null = null,
+): Keyboard {
   return [
+    ...(suggestion
+      ? [
+          [
+            {
+              text: t(locale, "suggestion", suggestion),
+              data: encodeAction({ type: "suggestion", purchaseId }),
+            },
+          ],
+        ]
+      : []),
     ...chunk(
       top.map((c) => ({
         text: c.name,

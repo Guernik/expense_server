@@ -363,6 +363,25 @@ Calls time out at 10s. Any failure degrades to the no-LLM path.
   <img alt="denarii architecture" src="docs/diagrams/architecture-light.png">
 </picture>
 
+Where each diagram box lives in the code. *Planned* boxes have no code yet.
+
+| Diagram | Code |
+|---|---|
+| Notification, MacroDroid | *Planned*: `macrodroid/`. Payload in §13.4 |
+| Denarii runtime | [`apps/cloudflare/src/index.ts`](apps/cloudflare/src/index.ts), [`apps/cloudflare/wrangler.jsonc`](apps/cloudflare/wrangler.jsonc). Node: *planned* (`apps/node/`) |
+| Hono API | [`packages/api/src/app.ts`](packages/api/src/app.ts) (`/api/ingest`, `/api/telegram`). tRPC: *planned* |
+| React SPA | *Planned*: `apps/web/` |
+| Google OAuth | *Planned*: Better Auth ([ADR-0008](docs/adr/0008-better-auth-google.md)) |
+| Rule packs | [`rules/<country>/<provider>.yaml`](rules/), bundled by [`rules/index.ts`](rules/index.ts), loaded by [`packages/api/src/rules.ts`](packages/api/src/rules.ts) |
+| Classifier | [`packages/core/src/rules/engine.ts`](packages/core/src/rules/engine.ts) (`classify`), [`packages/core/src/rules/schema.ts`](packages/core/src/rules/schema.ts), [`packages/core/src/rules/ignore-similar.ts`](packages/core/src/rules/ignore-similar.ts) (user rules). Driven by [`packages/core/src/process-event.ts`](packages/core/src/process-event.ts) |
+| Dedupe | [`packages/core/src/dedupe.ts`](packages/core/src/dedupe.ts), `insertPurchase` in [`packages/db/src/store.ts`](packages/db/src/store.ts) |
+| Categorizer | Merchant rule lookup in `announcePurchase` ([`packages/core/src/bot/flows.ts`](packages/core/src/bot/flows.ts)), [`packages/core/src/normalize.ts`](packages/core/src/normalize.ts) |
+| Telegram flows | [`packages/core/src/bot/`](packages/core/src/bot/) ([`flows.ts`](packages/core/src/bot/flows.ts), [`views.ts`](packages/core/src/bot/views.ts), [`callback-data.ts`](packages/core/src/bot/callback-data.ts), [`manual-purchase.ts`](packages/core/src/bot/manual-purchase.ts)), strings in [`packages/core/src/i18n.ts`](packages/core/src/i18n.ts) |
+| Telegram (Bot API) | `Messenger` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), implemented by [`packages/api/src/telegram.ts`](packages/api/src/telegram.ts) |
+| Scheduler | `Scheduler` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), digest in [`packages/core/src/digest.ts`](packages/core/src/digest.ts), Cron Trigger tick in [`packages/api/src/scheduler.ts`](packages/api/src/scheduler.ts) and [`packages/api/src/scheduled.ts`](packages/api/src/scheduled.ts) |
+| LLM provider | *Planned*: `packages/llm/` |
+| Store, SQLite | `Store` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), implemented by [`packages/db/src/store.ts`](packages/db/src/store.ts). Schema [`packages/db/src/schema.ts`](packages/db/src/schema.ts), migrations [`packages/db/migrations/`](packages/db/migrations/) |
+
 Nx + npm workspaces.
 
 ```

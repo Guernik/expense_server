@@ -49,5 +49,14 @@ export function createTelegramMessenger(token: string, fetchFn: typeof fetch = f
     async answerCallback(callbackId, text) {
       await call("answerCallbackQuery", { callback_query_id: callbackId, text });
     },
+
+    async acknowledge(chatId, messageId) {
+      // ✅ is not an allowed Telegram reaction emoji; 👌 is the closest one that is.
+      await call("setMessageReaction", {
+        chat_id: chatId,
+        message_id: messageId,
+        reaction: [{ type: "emoji", emoji: "👌" }],
+      });
+    },
   };
 }

@@ -2,6 +2,7 @@ import {
   type BotInput,
   type Clock,
   handleBotInput,
+  type LlmProvider,
   type Messenger,
   processEvent,
   type Store,
@@ -17,6 +18,8 @@ export interface Runtime {
   store: Store;
   messenger: Messenger;
   clock: Clock;
+  /** Undefined with `LLM_PROVIDER=none`. */
+  llm?: LlmProvider | undefined;
   /** Runs work after the response is sent (waitUntil on Workers). */
   defer(task: Promise<unknown>): void;
 }
@@ -63,8 +66,10 @@ const TelegramUpdate = z
   .looseObject({
     message: z
       .looseObject({
+        message_id: z.number().int(),
         chat: TelegramChat,
         text: z.string().optional(),
+        reply_to_message: z.looseObject({ message_id: z.number().int() }).optional(),
       })
       .optional(),
     callback_query: z
@@ -208,7 +213,8 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
   return app;
 }
 
-function ensureUser({ store, config }: Runtime) {
+/** The single v1 user, configured by `TELEGRAM_CHAT_ID`. */
+export function ensureUser({ store, config }: Pick<Runtime, "store" | "config">) {
   return store.ensureUser({
     telegramChatId: config.TELEGRAM_CHAT_ID,
     locale: config.LOCALE,
@@ -229,7 +235,12 @@ function toBotInput(update: z.infer<typeof TelegramUpdate>, chatId: string): Bot
     };
   }
   if (message?.text !== undefined && String(message.chat.id) === chatId) {
-    return { kind: "text", text: message.text };
+    return {
+      kind: "text",
+      text: message.text,
+      messageId: message.message_id,
+      ...(message.reply_to_message && { replyToMessageId: message.reply_to_message.message_id }),
+    };
   }
   return null;
 }

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@denarii/core": "*",
+    "@denarii/llm": "*",
     "@denarii/rules": "*",
     "@hono/zod-openapi": "^1.6.3",
     "hono": "^4.13.13",

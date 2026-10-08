@@ -14,6 +14,7 @@
   "dependencies": {
     "@denarii/api": "*",
     "@denarii/db": "*",
+    "@denarii/llm": "*",
     "drizzle-orm": "^0.45.3"
   },
   "devDependencies": {

@@ -26,7 +26,8 @@ export function localDateTimeToUtc(date: string, time: string | undefined, timeZ
   return zonedToUtc(year, month, day, hour, minute, timeZone);
 }
 
-interface WallClock {
+/** Local date and time in a time zone. */
+export interface WallClock {
   year: number;
   month: number;
   day: number;
@@ -35,7 +36,7 @@ interface WallClock {
   second: number;
 }
 
-function wallClock(date: Date, timeZone: string): WallClock {
+export function wallClock(date: Date, timeZone: string): WallClock {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
     hourCycle: "h23",

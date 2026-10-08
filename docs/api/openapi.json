@@ -81,6 +81,9 @@
           "message": {
             "type": "object",
             "properties": {
+              "message_id": {
+                "type": "integer"
+              },
               "chat": {
                 "type": "object",
                 "properties": {
@@ -95,9 +98,22 @@
               },
               "text": {
                 "type": "string"
+              },
+              "reply_to_message": {
+                "type": "object",
+                "properties": {
+                  "message_id": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "message_id"
+                ],
+                "additionalProperties": {}
               }
             },
             "required": [
+              "message_id",
               "chat"
             ],
             "additionalProperties": {}
