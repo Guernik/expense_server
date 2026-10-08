@@ -33,6 +33,16 @@ export function toMinor(amount: string, currency: Currency): number {
   return Number(integer) * 10 ** digits + Number(decimals.padEnd(digits, "0") || "0");
 }
 
+/** 1500001 ARS -> "15000.01", the inverse of `toMinor`. */
+export function fromMinor(amountMinor: number, currency: Currency): string {
+  const digits = MINOR_DIGITS[currency];
+  const integer = Math.trunc(amountMinor / 10 ** digits);
+  const decimals = String(amountMinor % 10 ** digits)
+    .padStart(digits, "0")
+    .replace(/0+$/, "");
+  return decimals ? `${integer}.${decimals}` : String(integer);
+}
+
 /** 1500001 ARS, "es-AR" -> "$15.000,01 ARS" */
 export function formatMoney(amountMinor: number, currency: Currency, intlLocale: string): string {
   const digits = MINOR_DIGITS[currency];

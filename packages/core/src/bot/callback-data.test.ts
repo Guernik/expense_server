@@ -20,6 +20,10 @@ const ACTIONS: Action[] = [
   { type: "ignoreSimilar", eventId: MAX_ID },
   { type: "confirmRule", eventId: MAX_ID },
   { type: "cancelRule", eventId: MAX_ID },
+  { type: "extractionCorrect", eventId: MAX_ID },
+  { type: "extractionEdit", eventId: MAX_ID },
+  { type: "saveRule", eventId: MAX_ID },
+  { type: "rejectRule", eventId: MAX_ID },
   { type: "noop" },
 ];
 

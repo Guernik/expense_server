@@ -25,6 +25,12 @@ export type Action =
   | { type: "ignoreSimilar"; eventId: number }
   | { type: "confirmRule"; eventId: number }
   | { type: "cancelRule"; eventId: number }
+  /** `✅ Correct` / `✏️ Edit` on the LLM extraction after PURCHASE (SPEC §7.3). */
+  | { type: "extractionCorrect"; eventId: number }
+  | { type: "extractionEdit"; eventId: number }
+  /** `Save rule` / `No` on the LLM rule proposal for the event. */
+  | { type: "saveRule"; eventId: number }
+  | { type: "rejectRule"; eventId: number }
   /** Non-interactive button, e.g. a group header in `More…`. */
   | { type: "noop" };
 
@@ -64,6 +70,14 @@ export function encodeAction(action: Action): string {
       return `y:${action.eventId}`;
     case "cancelRule":
       return `z:${action.eventId}`;
+    case "extractionCorrect":
+      return `k:${action.eventId}`;
+    case "extractionEdit":
+      return `j:${action.eventId}`;
+    case "saveRule":
+      return `r:${action.eventId}`;
+    case "rejectRule":
+      return `w:${action.eventId}`;
     case "noop":
       return "_";
   }
@@ -116,6 +130,14 @@ export function decodeAction(data: string): Action | null {
       return { type: "confirmRule", eventId: id };
     case "z":
       return { type: "cancelRule", eventId: id };
+    case "k":
+      return { type: "extractionCorrect", eventId: id };
+    case "j":
+      return { type: "extractionEdit", eventId: id };
+    case "r":
+      return { type: "saveRule", eventId: id };
+    case "w":
+      return { type: "rejectRule", eventId: id };
     default:
       return null;
   }

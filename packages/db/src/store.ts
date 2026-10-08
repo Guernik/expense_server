@@ -302,10 +302,39 @@ export function createStore(db: Database): Store {
       });
     },
 
-    async insertUserRule(userId, rule, createdFromEventId) {
+    async insertUserRule(userId, rule, createdFromEventId, options = {}) {
       await db
         .insert(schema.classifierRules)
-        .values({ userId, definition: rule, createdFromEventId });
+        .values({ userId, definition: rule, createdFromEventId, enabled: options.enabled ?? true });
+    },
+
+    async findProposedRule(userId, eventId) {
+      const [row] = await db
+        .select({ id: schema.classifierRules.id, definition: schema.classifierRules.definition })
+        .from(schema.classifierRules)
+        .where(
+          and(
+            eq(schema.classifierRules.userId, userId),
+            eq(schema.classifierRules.createdFromEventId, eventId),
+            eq(schema.classifierRules.enabled, false),
+          ),
+        )
+        .orderBy(desc(schema.classifierRules.id))
+        .limit(1);
+      if (!row) return null;
+      const result = ruleSchema.safeParse(row.definition);
+      return result.success ? { id: row.id, rule: result.data } : null;
+    },
+
+    async enableUserRule(ruleId) {
+      await db
+        .update(schema.classifierRules)
+        .set({ enabled: true })
+        .where(eq(schema.classifierRules.id, ruleId));
+    },
+
+    async deleteUserRule(ruleId) {
+      await db.delete(schema.classifierRules).where(eq(schema.classifierRules.id, ruleId));
     },
 
     async listGroups(userId) {
