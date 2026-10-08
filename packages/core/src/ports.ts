@@ -15,6 +15,8 @@ export type EventStatus =
 export type PurchaseKind = "purchase" | "transfer";
 export type PurchaseStatus = "pending" | "categorized" | "excluded";
 export type RuleSource = "pack" | "user";
+export type CategorizedBy = "rule" | "user" | "import";
+export type MerchantRuleSource = "user" | "import";
 
 export interface User {
   id: number;
@@ -59,10 +61,33 @@ export type PurchaseInsert =
   /** A purchase in the dedupe window already existed; nothing was inserted. */
   | { created: false; purchase: StoredPurchase; sourceEvent: StoredEvent };
 
-export interface StoredPurchase extends NewPurchase {
+export interface StoredPurchase extends Omit<NewPurchase, "sourceEventId"> {
   id: number;
+  /** Null for purchases recorded before dedupe (ADR-0011). */
+  sourceEventId: number | null;
   status: PurchaseStatus;
+  categoryId: number | null;
+  paymentMethod: string | null;
+  telegramMessageId: number | null;
 }
+
+export interface Group {
+  id: number;
+  name: string;
+}
+
+/** A category with its group, which is always derived through the category (ADR-0006). */
+export interface Category {
+  id: number;
+  name: string;
+  group: Group;
+}
+
+/** Free-text answer the bot is waiting for in a chat (SPEC §9 `chat_state`). */
+export type ChatState =
+  | { step: "awaiting_category_name"; purchaseId: number }
+  /** Group buttons are shown too; a tap answers it as well as free text. */
+  | { step: "awaiting_group_name"; purchaseId: number; categoryName: string };
 
 export interface EventClassification {
   status: EventStatus;
@@ -84,11 +109,50 @@ export interface Store {
    */
   insertPurchase(purchase: NewPurchase, window: { from: Date; to: Date }): Promise<PurchaseInsert>;
   updatePurchaseExtraction(purchaseId: number, extraction: PurchaseExtraction): Promise<void>;
+  getPurchase(userId: number, purchaseId: number): Promise<StoredPurchase | null>;
   setPurchaseTelegramMessage(purchaseId: number, messageId: number): Promise<void>;
+  /** Sets the category and marks the purchase `categorized`. */
+  categorizePurchase(purchaseId: number, categoryId: number, by: CategorizedBy): Promise<void>;
+
+  listGroups(userId: number): Promise<Group[]>;
+  /** Returns the group with this name (case-insensitive), creating it if missing. */
+  ensureGroup(userId: number, name: string): Promise<Group>;
+  getCategory(userId: number, categoryId: number): Promise<Category | null>;
+  findCategoryByName(userId: number, name: string): Promise<Category | null>;
+  createCategory(userId: number, name: string, groupId: number): Promise<Category>;
+  /** All categories, ordered by group name then category name. */
+  listCategories(userId: number): Promise<Category[]>;
+  /** Categories by number of categorized purchases since `since`, most used first, then by name. */
+  topCategories(userId: number, since: Date, limit: number): Promise<Category[]>;
+
+  findMerchantRule(userId: number, merchantNormalized: string): Promise<Category | null>;
+  upsertMerchantRule(
+    userId: number,
+    merchantNormalized: string,
+    categoryId: number,
+    source: MerchantRuleSource,
+  ): Promise<void>;
+
+  /** Returns the chat's state unless it expired at `now`. */
+  getChatState(chatId: string, now: Date): Promise<ChatState | null>;
+  setChatState(userId: number, chatId: string, state: ChatState, expiresAt: Date): Promise<void>;
+  clearChatState(chatId: string): Promise<void>;
 }
 
+/** An inline keyboard button. `data` is Telegram `callback_data` and must stay under 64 bytes. */
+export interface Button {
+  text: string;
+  data: string;
+}
+
+export type Keyboard = Button[][];
+
 export interface Messenger {
-  send(chatId: string, text: string): Promise<{ messageId: number }>;
+  send(chatId: string, text: string, keyboard?: Keyboard): Promise<{ messageId: number }>;
+  /** Replaces a message's text and keyboard. No keyboard removes it. */
+  edit(chatId: string, messageId: number, text: string, keyboard?: Keyboard): Promise<void>;
+  /** Acknowledges a button tap, optionally with a short toast. */
+  answerCallback(callbackId: string, text?: string): Promise<void>;
 }
 
 export interface Clock {

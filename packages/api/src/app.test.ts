@@ -1,62 +1,8 @@
-import { compileRules, type Messenger, parsePack, processEvent } from "@denarii/core";
-import { createStore, schema } from "@denarii/db";
-import { createTestDatabase } from "@denarii/db/testing";
+import { compileRules, parsePack, processEvent } from "@denarii/core";
+import { schema } from "@denarii/db";
 import { PACK_SOURCES } from "@denarii/rules";
 import { describe, expect, it } from "vitest";
-import { createApp, type Runtime } from "./app";
-import { parseConfig } from "./config";
-
-const WEBHOOK_SECRET = "test-webhook-secret-0123";
-const TELEGRAM_SECRET = "test-telegram-secret-0123";
-
-function setup(locale: "en" | "es" = "es") {
-  const db = createTestDatabase();
-  const sent: { chatId: string; text: string }[] = [];
-  const messenger: Messenger = {
-    async send(chatId, text) {
-      sent.push({ chatId, text });
-      return { messageId: 1000 + sent.length };
-    },
-  };
-  const tasks: Promise<unknown>[] = [];
-  const runtime: Runtime = {
-    config: parseConfig({
-      WEBHOOK_SECRET,
-      TELEGRAM_BOT_TOKEN: "token",
-      TELEGRAM_CHAT_ID: "42",
-      TELEGRAM_WEBHOOK_SECRET: TELEGRAM_SECRET,
-      RULE_PACKS: "ar.galicia,ar.mercadopago",
-      LOCALE: locale,
-    }),
-    store: createStore(db),
-    messenger,
-    clock: { now: () => new Date("2026-10-07T01:32:10Z") },
-    defer: (task) => tasks.push(task),
-  };
-  const app = createApp(() => runtime);
-  const settled = () => Promise.all(tasks);
-
-  const ingest = (body: unknown, secret = WEBHOOK_SECRET) =>
-    app.request("/api/ingest", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-webhook-secret": secret },
-      body: JSON.stringify(body),
-    });
-  const telegram = (update: unknown, secret = TELEGRAM_SECRET) =>
-    app.request("/api/telegram", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-telegram-bot-api-secret-token": secret },
-      body: JSON.stringify(update),
-    });
-
-  return { app, db, sent, ingest, telegram, settled };
-}
-
-const GALICIA_PURCHASE = {
-  app: "Galicia",
-  title: "Pagaste $15.000,01",
-  text: "A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 22:32.",
-};
+import { GALICIA_PURCHASE, setup } from "./test-harness";
 
 describe("POST /api/ingest", () => {
   it("rejects a missing or wrong secret without storing anything", async () => {
@@ -77,7 +23,7 @@ describe("POST /api/ingest", () => {
   });
 
   it("stores the event, records the purchase and announces it in Telegram", async () => {
-    const { db, sent, ingest, settled } = setup("es");
+    const { db, messages, ingest, settled } = setup("es");
     const response = await ingest(GALICIA_PURCHASE);
     expect(response.status).toBe(202);
     await settled();
@@ -104,7 +50,7 @@ describe("POST /api/ingest", () => {
       purchaseId: purchase?.id,
     });
 
-    expect(sent).toEqual([
+    expect(messages).toMatchObject([
       {
         chatId: "42",
         text: "🛒 $15.000,01 ARS · AXION VILLA ALLENDE\nGalicia Visa Crédito 3551 · 22:32",
@@ -131,7 +77,7 @@ describe("POST /api/ingest", () => {
   });
 
   it("records a Mercado Pago account purchase", async () => {
-    const { db, sent, ingest, settled } = setup("es");
+    const { db, messages, ingest, settled } = setup("es");
     await ingest({
       app: "Mercado Pago",
       title: "Pagaste a SHOWCASE CORDOBA",
@@ -148,25 +94,27 @@ describe("POST /api/ingest", () => {
     });
     const [method] = db.select().from(schema.paymentMethods).all();
     expect(method?.label).toBe("Mercado Pago cuenta");
-    expect(sent[0]?.text).toBe("🛒 $10.200,00 ARS · SHOWCASE CORDOBA\nMercado Pago cuenta · 14:05");
+    expect(messages[0]?.text).toBe(
+      "🛒 $10.200,00 ARS · SHOWCASE CORDOBA\nMercado Pago cuenta · 14:05",
+    );
   });
 
   it("formats the notice in English", async () => {
-    const { sent, ingest, settled } = setup("en");
+    const { messages, ingest, settled } = setup("en");
     await ingest(GALICIA_PURCHASE);
     await settled();
-    expect(sent[0]?.text).toBe(
+    expect(messages[0]?.text).toBe(
       "🛒 $15,000.01 ARS · AXION VILLA ALLENDE\nGalicia Visa Crédito 3551 · 22:32",
     );
   });
 
   it("stores unrecognized notifications as unmatched without messaging", async () => {
-    const { db, sent, ingest, settled } = setup();
+    const { db, messages, ingest, settled } = setup();
     await ingest({ app: "Galicia", title: "Tu nuevo look 💈", text: "25% off" });
     await settled();
     expect(db.select().from(schema.events).all()[0]?.status).toBe("unmatched");
     expect(db.select().from(schema.purchases).all()).toHaveLength(0);
-    expect(sent).toHaveLength(0);
+    expect(messages).toHaveLength(0);
   });
 
   it("reuses the payment method for the same label", async () => {
@@ -183,7 +131,7 @@ describe("dedupe", () => {
   const at = (time: string) => ({ ...GALICIA_PURCHASE, received_at: `2026-10-07T01:${time}Z` });
 
   it("merges the same notification posted twice within 30 s", async () => {
-    const { db, sent, ingest, settled } = setup();
+    const { db, messages, ingest, settled } = setup();
     await ingest(at("32:10"));
     await ingest(at("32:40"));
     await settled();
@@ -195,7 +143,7 @@ describe("dedupe", () => {
       ["purchase", purchases[0]?.id],
       ["duplicate", purchases[0]?.id],
     ]);
-    expect(sent).toHaveLength(1);
+    expect(messages).toHaveLength(1);
   });
 
   it("merges an event received before the existing purchase's", async () => {
@@ -207,12 +155,12 @@ describe("dedupe", () => {
   });
 
   it("keeps purchases 31 s apart separate", async () => {
-    const { db, sent, ingest, settled } = setup();
+    const { db, messages, ingest, settled } = setup();
     await ingest(at("32:10"));
     await ingest(at("32:41"));
     await settled();
     expect(db.select().from(schema.purchases).all()).toHaveLength(2);
-    expect(sent).toHaveLength(2);
+    expect(messages).toHaveLength(2);
   });
 
   it("keeps purchases in different currencies separate", async () => {
@@ -230,9 +178,8 @@ describe("dedupe", () => {
   });
 
   it("keeps the extraction with more non-null fields", async () => {
-    const db = createTestDatabase();
-    const store = createStore(db);
-    const messenger: Messenger = { send: async () => ({ messageId: 1 }) };
+    const { db, runtime } = setup();
+    const { store, messenger, clock } = runtime;
     const wallet = parsePack(
       "test.wallet",
       `pack: test.wallet
@@ -255,7 +202,7 @@ rules:
         text,
         receivedAt: new Date(`2026-10-07T01:${time}Z`),
       });
-      await processEvent({ store, messenger, rules }, user, event);
+      await processEvent({ store, messenger, clock, rules }, user, event);
     };
     const purchases = () =>
       db
@@ -280,16 +227,16 @@ describe("POST /api/telegram", () => {
   });
 
   it("ignores chats other than the configured one", async () => {
-    const { sent, telegram } = setup();
+    const { messages, telegram } = setup();
     const response = await telegram({ message: { chat: { id: 7 }, text: "/start" } });
     expect(response.status).toBe(200);
-    expect(sent).toHaveLength(0);
+    expect(messages).toHaveLength(0);
   });
 
   it("answers /start in the configured chat", async () => {
-    const { sent, telegram } = setup("es");
+    const { messages, telegram } = setup("es");
     await telegram({ message: { chat: { id: 42 }, text: "/start" } });
-    expect(sent).toEqual([
+    expect(messages).toMatchObject([
       { chatId: "42", text: "denarii está funcionando. Tus compras van a aparecer acá." },
     ]);
   });

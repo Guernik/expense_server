@@ -1,7 +1,8 @@
+import { announcePurchase, type BotDeps } from "./bot/flows";
 import { INTL_LOCALE, t } from "./i18n";
 import { formatMoney, toMinor } from "./money";
 import { resolveOccurredAt } from "./occurred-at";
-import type { Messenger, Store, StoredEvent, User } from "./ports";
+import type { StoredEvent, User } from "./ports";
 import {
   type CompiledRule,
   classify,
@@ -12,9 +13,7 @@ import {
 /** Events of the same amount and currency this close together are one purchase (ADR-0011). */
 export const DEDUPE_WINDOW_MS = 30_000;
 
-export interface ProcessDeps {
-  store: Store;
-  messenger: Messenger;
+export interface ProcessDeps extends BotDeps {
   rules: CompiledRule[];
 }
 
@@ -77,6 +76,11 @@ export async function processEvent(
   }
   await store.classifyEvent(event.id, { status: result.kind, ...ruleRef, purchaseId: purchase.id });
 
+  if (result.kind === "purchase") {
+    await announcePurchase(deps, user, purchase);
+    return;
+  }
+
   const intlLocale = INTL_LOCALE[user.locale];
   const time =
     fields.time ??
@@ -87,16 +91,7 @@ export async function processEvent(
       hourCycle: "h23",
     }).format(event.receivedAt);
   const amount = formatMoney(purchase.amountMinor, purchase.currency, intlLocale);
-  const text =
-    result.kind === "transfer"
-      ? t(user.locale, "transferNotice", { amount, time })
-      : t(user.locale, "purchaseNotice", {
-          amount,
-          merchant: fields.merchant,
-          paymentMethod: fields.paymentMethod ?? "",
-          time,
-        });
-
+  const text = t(user.locale, "transferNotice", { amount, time });
   const { messageId } = await messenger.send(user.telegramChatId, text);
   await store.setPurchaseTelegramMessage(purchase.id, messageId);
 }
