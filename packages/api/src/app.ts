@@ -1,4 +1,11 @@
-import { type Clock, type Messenger, processEvent, type Store, t } from "@denarii/core";
+import {
+  type BotInput,
+  type Clock,
+  handleBotInput,
+  type Messenger,
+  processEvent,
+  type Store,
+} from "@denarii/core";
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import type { Context, Env, MiddlewareHandler } from "hono";
 import type { Config } from "./config";
@@ -50,12 +57,21 @@ const IngestAccepted = z
   .object({ event_id: z.number().int().openapi({ example: 1 }) })
   .openapi("IngestAccepted");
 
+const TelegramChat = z.looseObject({ id: z.number().int() });
+
 const TelegramUpdate = z
   .looseObject({
     message: z
       .looseObject({
-        chat: z.looseObject({ id: z.number().int() }),
+        chat: TelegramChat,
         text: z.string().optional(),
+      })
+      .optional(),
+    callback_query: z
+      .looseObject({
+        id: z.string(),
+        data: z.string().optional(),
+        message: z.looseObject({ message_id: z.number().int(), chat: TelegramChat }).optional(),
       })
       .optional(),
   })
@@ -141,11 +157,7 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
       const { config, store } = runtime;
       const body = c.req.valid("json");
 
-      const user = await store.ensureUser({
-        telegramChatId: config.TELEGRAM_CHAT_ID,
-        locale: config.LOCALE,
-        timezone: config.TIMEZONE,
-      });
+      const user = await ensureUser(runtime);
       const event = await store.insertEvent({
         userId: user.id,
         app: body.app,
@@ -154,7 +166,7 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
         receivedAt: body.received_at ? new Date(body.received_at) : runtime.clock.now(),
       });
 
-      const deps = { store, messenger: runtime.messenger, rules: loadRules(config.RULE_PACKS) };
+      const deps = { ...runtime, rules: loadRules(config.RULE_PACKS) };
       runtime.defer(
         processEvent(deps, user, event).catch((error: unknown) => {
           console.error(`Processing event ${event.id} failed`, error);
@@ -172,15 +184,9 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
       ],
     },
     async (c) => {
-      const { config, messenger } = resolve(c);
-      const { message } = c.req.valid("json");
-      // The bot only talks to the configured chat; everything else is acknowledged and dropped.
-      if (!message || String(message.chat.id) !== config.TELEGRAM_CHAT_ID) {
-        return c.body(null, 200);
-      }
-      if (message.text?.startsWith("/start")) {
-        await messenger.send(config.TELEGRAM_CHAT_ID, t(config.LOCALE, "start"));
-      }
+      const runtime = resolve(c);
+      const input = toBotInput(c.req.valid("json"), runtime.config.TELEGRAM_CHAT_ID);
+      if (input) await handleBotInput(runtime, await ensureUser(runtime), input);
       return c.body(null, 200);
     },
   );
@@ -200,6 +206,32 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
   app.doc31("/api/openapi.json", OPENAPI_INFO);
 
   return app;
+}
+
+function ensureUser({ store, config }: Runtime) {
+  return store.ensureUser({
+    telegramChatId: config.TELEGRAM_CHAT_ID,
+    locale: config.LOCALE,
+    timezone: config.TIMEZONE,
+  });
+}
+
+/** The bot only talks to the configured chat; everything else is acknowledged and dropped. */
+function toBotInput(update: z.infer<typeof TelegramUpdate>, chatId: string): BotInput | null {
+  const { message, callback_query: callback } = update;
+  if (callback?.message && callback.data !== undefined) {
+    if (String(callback.message.chat.id) !== chatId) return null;
+    return {
+      kind: "callback",
+      callbackId: callback.id,
+      messageId: callback.message.message_id,
+      data: callback.data,
+    };
+  }
+  if (message?.text !== undefined && String(message.chat.id) === chatId) {
+    return { kind: "text", text: message.text };
+  }
+  return null;
 }
 
 /** Constant-time comparison for equal-length secrets. */

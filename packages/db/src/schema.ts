@@ -39,6 +39,63 @@ export const paymentMethods = sqliteTable(
   (t) => [uniqueIndex("payment_methods_user_label").on(t.userId, t.label)],
 );
 
+export const groups = sqliteTable(
+  "groups",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("groups_user_name").on(t.userId, t.name)],
+);
+
+/** A category's group is the only link to groups; purchases never store one (ADR-0006). */
+export const categories = sqliteTable(
+  "categories",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    name: text("name").notNull(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("categories_user_name").on(t.userId, t.name)],
+);
+
+export const merchantRules = sqliteTable(
+  "merchant_rules",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    merchantNormalized: text("merchant_normalized").notNull(),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => categories.id),
+    source: text("source", { enum: ["user", "import"] }).notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("merchant_rules_user_merchant").on(t.userId, t.merchantNormalized)],
+);
+
+/** Pending free-text conversation step per chat (ADR-0012). */
+export const chatState = sqliteTable("chat_state", {
+  chatId: text("chat_id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  state: text("state", { mode: "json" }).notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
+
 export const purchases = sqliteTable(
   "purchases",
   {
@@ -56,6 +113,8 @@ export const purchases = sqliteTable(
     merchantRaw: text("merchant_raw").notNull(),
     merchantNormalized: text("merchant_normalized").notNull(),
     paymentMethodId: integer("payment_method_id").references(() => paymentMethods.id),
+    categoryId: integer("category_id").references(() => categories.id),
+    categorizedBy: text("categorized_by", { enum: ["rule", "user", "import"] }),
     comment: text("comment"),
     source: text("source", { enum: ["live", "import"] })
       .notNull()
@@ -64,7 +123,9 @@ export const purchases = sqliteTable(
     /** The event that created this purchase. Its `received_at` anchors dedupe (ADR-0011). */
     sourceEventId: integer("source_event_id").references((): AnySQLiteColumn => events.id),
     createdAt: createdAt(),
-    updatedAt: createdAt().$onUpdate(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .$defaultFn(() => new Date().toISOString())
+      .$onUpdate(() => new Date().toISOString()),
   },
   (t) => [
     index("purchases_user_occurred").on(t.userId, t.occurredAt),

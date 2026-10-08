@@ -101,6 +101,46 @@
               "chat"
             ],
             "additionalProperties": {}
+          },
+          "callback_query": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "data": {
+                "type": "string"
+              },
+              "message": {
+                "type": "object",
+                "properties": {
+                  "message_id": {
+                    "type": "integer"
+                  },
+                  "chat": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "message_id",
+                  "chat"
+                ],
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": {}
           }
         },
         "additionalProperties": {},

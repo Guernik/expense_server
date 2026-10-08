@@ -1,4 +1,6 @@
 import type {
+  Category,
+  ChatState,
   EventClassification,
   NewEvent,
   NewPurchase,
@@ -9,8 +11,8 @@ import type {
   StoredPurchase,
   User,
 } from "@denarii/core";
-import { and, asc, between, eq, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { and, asc, between, count, desc, eq, gte, sql } from "drizzle-orm";
+import type { BaseSQLiteDatabase, SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as schema from "./schema";
 
 /** Any Drizzle SQLite database: D1 (async) or better-sqlite3 (sync). */
@@ -70,20 +72,25 @@ export function createStore(db: Database): Store {
       const to = window.to.toISOString();
       const occurredAt = purchase.occurredAt.toISOString();
       // One statement, so concurrent duplicates can't both pass the check (D1 serializes writes).
-      const inserted = await db.all<{ id: number; status: StoredPurchase["status"] }>(sql`
+      const inserted = await db.all<{ id: number }>(sql`
         INSERT INTO purchases (user_id, kind, occurred_at, amount_minor, currency, merchant_raw,
-          merchant_normalized, payment_method_id, source_event_id)
+          merchant_normalized, payment_method_id, source_event_id, updated_at)
         SELECT ${purchase.userId}, ${purchase.kind}, ${occurredAt}, ${purchase.amountMinor},
           ${purchase.currency}, ${purchase.merchantRaw}, ${purchase.merchantNormalized},
-          ${purchase.paymentMethodId}, ${purchase.sourceEventId}
+          ${purchase.paymentMethodId}, ${purchase.sourceEventId}, ${new Date().toISOString()}
         WHERE NOT EXISTS (
           SELECT 1 FROM purchases p JOIN events e ON e.id = p.source_event_id
           WHERE p.user_id = ${purchase.userId} AND p.amount_minor = ${purchase.amountMinor}
             AND p.currency = ${purchase.currency} AND e.received_at BETWEEN ${from} AND ${to}
         )
-        RETURNING id, status`);
+        RETURNING id`);
       const [row] = inserted;
-      if (row) return { created: true, purchase: { ...purchase, ...row } };
+      if (row) {
+        return {
+          created: true,
+          purchase: required(await this.getPurchase(purchase.userId, row.id)),
+        };
+      }
 
       const [existing] = await db
         .select({ purchase: schema.purchases, event: schema.events })
@@ -102,19 +109,7 @@ export function createStore(db: Database): Store {
       const { purchase: p, event: e } = required(existing);
       return {
         created: false,
-        purchase: {
-          id: p.id,
-          userId: p.userId,
-          kind: p.kind,
-          status: p.status,
-          occurredAt: new Date(p.occurredAt),
-          amountMinor: p.amountMinor,
-          currency: p.currency,
-          merchantRaw: p.merchantRaw,
-          merchantNormalized: p.merchantNormalized,
-          paymentMethodId: p.paymentMethodId,
-          sourceEventId: e.id,
-        },
+        purchase: required(await this.getPurchase(p.userId, p.id)),
         sourceEvent: {
           id: e.id,
           userId: e.userId,
@@ -124,6 +119,35 @@ export function createStore(db: Database): Store {
           receivedAt: new Date(e.receivedAt),
           status: e.status,
         },
+      };
+    },
+
+    async getPurchase(userId, purchaseId) {
+      const [row] = await db
+        .select({ purchase: schema.purchases, paymentMethod: schema.paymentMethods.label })
+        .from(schema.purchases)
+        .leftJoin(
+          schema.paymentMethods,
+          eq(schema.paymentMethods.id, schema.purchases.paymentMethodId),
+        )
+        .where(and(eq(schema.purchases.userId, userId), eq(schema.purchases.id, purchaseId)));
+      if (!row) return null;
+      const { purchase: p } = row;
+      return {
+        id: p.id,
+        userId: p.userId,
+        kind: p.kind,
+        status: p.status,
+        occurredAt: new Date(p.occurredAt),
+        amountMinor: p.amountMinor,
+        currency: p.currency,
+        merchantRaw: p.merchantRaw,
+        merchantNormalized: p.merchantNormalized,
+        paymentMethodId: p.paymentMethodId,
+        sourceEventId: p.sourceEventId,
+        paymentMethod: row.paymentMethod,
+        categoryId: p.categoryId,
+        telegramMessageId: p.telegramMessageId,
       };
     },
 
@@ -137,7 +161,153 @@ export function createStore(db: Database): Store {
         .set({ telegramMessageId: messageId })
         .where(eq(schema.purchases.id, purchaseId));
     },
+
+    async categorizePurchase(purchaseId, categoryId, by) {
+      await db
+        .update(schema.purchases)
+        .set({ categoryId, categorizedBy: by, status: "categorized" })
+        .where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async listGroups(userId) {
+      return db
+        .select({ id: schema.groups.id, name: schema.groups.name })
+        .from(schema.groups)
+        .where(eq(schema.groups.userId, userId))
+        .orderBy(asc(schema.groups.name));
+    },
+
+    async ensureGroup(userId, name) {
+      const [existing] = await db
+        .select({ id: schema.groups.id, name: schema.groups.name })
+        .from(schema.groups)
+        .where(and(eq(schema.groups.userId, userId), sameName(schema.groups.name, name)));
+      if (existing) return existing;
+      const [row] = await db
+        .insert(schema.groups)
+        .values({ userId, name })
+        .returning({ id: schema.groups.id, name: schema.groups.name });
+      return required(row);
+    },
+
+    async getCategory(userId, categoryId) {
+      const [row] = await selectCategories(db).where(
+        and(eq(schema.categories.userId, userId), eq(schema.categories.id, categoryId)),
+      );
+      return row ? toCategory(row) : null;
+    },
+
+    async findCategoryByName(userId, name) {
+      const [row] = await selectCategories(db).where(
+        and(eq(schema.categories.userId, userId), sameName(schema.categories.name, name)),
+      );
+      return row ? toCategory(row) : null;
+    },
+
+    async createCategory(userId, name, groupId) {
+      const [row] = await db
+        .insert(schema.categories)
+        .values({ userId, name, groupId })
+        .returning({ id: schema.categories.id });
+      return required(await this.getCategory(userId, required(row).id));
+    },
+
+    async listCategories(userId) {
+      const rows = await selectCategories(db)
+        .where(eq(schema.categories.userId, userId))
+        .orderBy(asc(schema.groups.name), asc(schema.categories.name));
+      return rows.map(toCategory);
+    },
+
+    async topCategories(userId, since, limit) {
+      const uses = count(schema.purchases.id);
+      const rows = await selectCategories(db)
+        .leftJoin(
+          schema.purchases,
+          and(
+            eq(schema.purchases.categoryId, schema.categories.id),
+            eq(schema.purchases.status, "categorized"),
+            gte(schema.purchases.occurredAt, since.toISOString()),
+          ),
+        )
+        .where(eq(schema.categories.userId, userId))
+        .groupBy(schema.categories.id)
+        .orderBy(desc(uses), asc(schema.categories.name))
+        .limit(limit);
+      return rows.map(toCategory);
+    },
+
+    async findMerchantRule(userId, merchantNormalized) {
+      const [row] = await selectCategories(db)
+        .innerJoin(schema.merchantRules, eq(schema.merchantRules.categoryId, schema.categories.id))
+        .where(
+          and(
+            eq(schema.merchantRules.userId, userId),
+            eq(schema.merchantRules.merchantNormalized, merchantNormalized),
+          ),
+        );
+      return row ? toCategory(row) : null;
+    },
+
+    async upsertMerchantRule(userId, merchantNormalized, categoryId, source) {
+      const updatedAt = new Date().toISOString();
+      await db
+        .insert(schema.merchantRules)
+        .values({ userId, merchantNormalized, categoryId, source, updatedAt })
+        .onConflictDoUpdate({
+          target: [schema.merchantRules.userId, schema.merchantRules.merchantNormalized],
+          set: { categoryId, source, updatedAt },
+        });
+    },
+
+    async getChatState(chatId, now) {
+      const [row] = await db
+        .select({ state: schema.chatState.state, expiresAt: schema.chatState.expiresAt })
+        .from(schema.chatState)
+        .where(eq(schema.chatState.chatId, chatId));
+      if (!row || row.expiresAt <= now.toISOString()) return null;
+      return row.state as ChatState;
+    },
+
+    async setChatState(userId, chatId, state, expiresAt) {
+      const values = { userId, state, expiresAt: expiresAt.toISOString() };
+      await db
+        .insert(schema.chatState)
+        .values({ chatId, ...values })
+        .onConflictDoUpdate({ target: schema.chatState.chatId, set: values });
+    },
+
+    async clearChatState(chatId) {
+      await db.delete(schema.chatState).where(eq(schema.chatState.chatId, chatId));
+    },
   };
+}
+
+function selectCategories(db: Database) {
+  return db
+    .select({
+      id: schema.categories.id,
+      name: schema.categories.name,
+      groupId: schema.groups.id,
+      groupName: schema.groups.name,
+    })
+    .from(schema.categories)
+    .innerJoin(schema.groups, eq(schema.groups.id, schema.categories.groupId))
+    .$dynamic();
+}
+
+function toCategory(row: {
+  id: number;
+  name: string;
+  groupId: number;
+  groupName: string;
+}): Category {
+  return { id: row.id, name: row.name, group: { id: row.groupId, name: row.groupName } };
+}
+
+/** Case-insensitive name match (ASCII), so "delivery" finds "Delivery". */
+function sameName(column: SQLiteColumn, name: string) {
+  return sql`${column} = ${name} COLLATE NOCASE`;
 }
 
 function toUser(row: typeof schema.users.$inferSelect): User {
@@ -149,7 +319,7 @@ function toUser(row: typeof schema.users.$inferSelect): User {
   };
 }
 
-function required<T>(row: T | undefined): T {
-  if (row === undefined) throw new Error("Expected a row");
+function required<T>(row: T | null | undefined): T {
+  if (row == null) throw new Error("Expected a row");
   return row;
 }
