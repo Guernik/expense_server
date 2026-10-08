@@ -8,6 +8,9 @@ const en = {
   purchaseNotice: "🛒 {amount} · {merchant}\n{details}",
   purchaseCategorized: "✅ {amount} · {merchant}\n{details}",
   transferNotice: "↗️ Transfer {amount}\n{time}",
+  transferExpense: "💸 Expense",
+  transferNotExpense: "↔️ Not an expense",
+  askTransferDescription: "What was the transfer of {amount} for? Type a short description.",
   start: "denarii is running. Your purchases will show up here.",
   more: "More…",
   newCategory: "➕ New category",
@@ -39,12 +42,21 @@ const en = {
   cancel: "Cancel",
   ignoreRuleSaved: "🔇 Similar notifications will be ignored.",
   suggestion: "✨ {category} ({group})",
+  help: "Commands:\n/pending - re-send the prompts of pending purchases and transfers\n/setgroup <category> <group> - move a category to a group\n/help - this list\n\nReply to a purchase message to set its comment.",
+  nothingPending: "Nothing pending.",
+  setGroupUsage: "Usage: /setgroup <category> <group>, e.g. /setgroup Delivery Food",
+  unknownCategory: "There is no category named {name}.",
+  categoryMoved: "{category} is now in {group}.",
 };
 
 const es: typeof en = {
   purchaseNotice: "🛒 {amount} · {merchant}\n{details}",
   purchaseCategorized: "✅ {amount} · {merchant}\n{details}",
   transferNotice: "↗️ Transferencia {amount}\n{time}",
+  transferExpense: "💸 Gasto",
+  transferNotExpense: "↔️ No es un gasto",
+  askTransferDescription:
+    "¿En qué fue la transferencia de {amount}? Escribí una descripción corta.",
   start: "denarii está funcionando. Tus compras van a aparecer acá.",
   more: "Más…",
   newCategory: "➕ Nueva categoría",
@@ -77,6 +89,11 @@ const es: typeof en = {
   cancel: "Cancelar",
   ignoreRuleSaved: "🔇 Las notificaciones similares se van a ignorar.",
   suggestion: "✨ {category} ({group})",
+  help: "Comandos:\n/pending - reenvía las preguntas de compras y transferencias pendientes\n/setgroup <categoría> <grupo> - mueve una categoría a un grupo\n/help - esta lista\n\nRespondé a un mensaje de una compra para guardar un comentario.",
+  nothingPending: "No hay nada pendiente.",
+  setGroupUsage: "Uso: /setgroup <categoría> <grupo>, por ejemplo /setgroup Delivery Comida",
+  unknownCategory: "No hay ninguna categoría llamada {name}.",
+  categoryMoved: "{category} ahora está en {group}.",
 };
 
 const MESSAGES: Record<Locale, typeof en> = { en, es };

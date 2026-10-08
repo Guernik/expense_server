@@ -135,33 +135,35 @@ export function createStore(db: Database): Store {
     },
 
     async getPurchase(userId, purchaseId) {
-      const [row] = await db
-        .select({ purchase: schema.purchases, paymentMethod: schema.paymentMethods.label })
-        .from(schema.purchases)
-        .leftJoin(
-          schema.paymentMethods,
-          eq(schema.paymentMethods.id, schema.purchases.paymentMethodId),
+      const [row] = await selectPurchases(db).where(
+        and(eq(schema.purchases.userId, userId), eq(schema.purchases.id, purchaseId)),
+      );
+      return row ? toPurchase(row) : null;
+    },
+
+    async findPurchaseByTelegramMessage(userId, messageId) {
+      const [row] = await selectPurchases(db)
+        .where(
+          and(
+            eq(schema.purchases.userId, userId),
+            eq(schema.purchases.telegramMessageId, messageId),
+          ),
         )
-        .where(and(eq(schema.purchases.userId, userId), eq(schema.purchases.id, purchaseId)));
-      if (!row) return null;
-      const { purchase: p } = row;
-      return {
-        id: p.id,
-        userId: p.userId,
-        kind: p.kind,
-        status: p.status,
-        occurredAt: new Date(p.occurredAt),
-        amountMinor: p.amountMinor,
-        currency: p.currency,
-        merchantRaw: p.merchantRaw,
-        merchantNormalized: p.merchantNormalized,
-        paymentMethodId: p.paymentMethodId,
-        sourceEventId: p.sourceEventId,
-        paymentMethod: row.paymentMethod,
-        categoryId: p.categoryId,
-        telegramMessageId: p.telegramMessageId,
-        suggestion: toSuggestion(p),
-      };
+        .orderBy(desc(schema.purchases.id))
+        .limit(1);
+      return row ? toPurchase(row) : null;
+    },
+
+    async setPurchaseComment(purchaseId, comment) {
+      await db.update(schema.purchases).set({ comment }).where(eq(schema.purchases.id, purchaseId));
+    },
+
+    async listPendingPurchases(userId, limit) {
+      const rows = await selectPurchases(db)
+        .where(and(eq(schema.purchases.userId, userId), eq(schema.purchases.status, "pending")))
+        .orderBy(asc(schema.purchases.occurredAt), asc(schema.purchases.id))
+        .limit(limit);
+      return rows.map(toPurchase);
     },
 
     async updatePurchaseExtraction(purchaseId: number, extraction: PurchaseExtraction) {
@@ -308,6 +310,13 @@ export function createStore(db: Database): Store {
       return required(await this.getCategory(userId, required(row).id));
     },
 
+    async setCategoryGroup(categoryId, groupId) {
+      await db
+        .update(schema.categories)
+        .set({ groupId })
+        .where(eq(schema.categories.id, categoryId));
+    },
+
     async listCategories(userId) {
       const rows = await selectCategories(db)
         .where(eq(schema.categories.userId, userId))
@@ -390,6 +399,39 @@ function selectCategories(db: Database) {
     .from(schema.categories)
     .innerJoin(schema.groups, eq(schema.groups.id, schema.categories.groupId))
     .$dynamic();
+}
+
+function selectPurchases(db: Database) {
+  return db
+    .select({ purchase: schema.purchases, paymentMethod: schema.paymentMethods.label })
+    .from(schema.purchases)
+    .leftJoin(schema.paymentMethods, eq(schema.paymentMethods.id, schema.purchases.paymentMethodId))
+    .$dynamic();
+}
+
+function toPurchase(row: {
+  purchase: typeof schema.purchases.$inferSelect;
+  paymentMethod: string | null;
+}): StoredPurchase {
+  const { purchase: p } = row;
+  return {
+    id: p.id,
+    userId: p.userId,
+    kind: p.kind,
+    status: p.status,
+    occurredAt: new Date(p.occurredAt),
+    amountMinor: p.amountMinor,
+    currency: p.currency,
+    merchantRaw: p.merchantRaw,
+    merchantNormalized: p.merchantNormalized,
+    paymentMethodId: p.paymentMethodId,
+    sourceEventId: p.sourceEventId,
+    paymentMethod: row.paymentMethod,
+    categoryId: p.categoryId,
+    comment: p.comment,
+    telegramMessageId: p.telegramMessageId,
+    suggestion: toSuggestion(p),
+  };
 }
 
 function toCategory(row: {

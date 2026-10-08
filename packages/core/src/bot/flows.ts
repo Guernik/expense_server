@@ -15,9 +15,11 @@ import type {
 import { UNKNOWN_MERCHANT } from "../rules/engine";
 import { ignoreSimilarRule, similarMatch } from "../rules/ignore-similar";
 import { type Action, decodeAction } from "./callback-data";
+import { type Command, parseCommand, splitSetGroupArgs } from "./commands";
 import { parseManualPurchase } from "./manual-purchase";
 import { suggestCategory, suggestionLabel } from "./suggestion";
 import {
+  amountLabel,
   categoryLabel,
   confirmationKeyboard,
   confirmationText,
@@ -30,6 +32,9 @@ import {
   pickerKeyboard,
   pickerText,
   TOP_CATEGORIES,
+  transferKeyboard,
+  transferNotExpenseText,
+  transferText,
   unmatchedKeyboard,
   unmatchedText,
 } from "./views";
@@ -46,12 +51,14 @@ export interface BotDeps {
 
 /** What the bot receives from the configured chat, independent of the messenger. */
 export type BotInput =
-  | { kind: "text"; text: string }
+  /** `replyToMessageId` is set when the user replied to one of the bot's messages. */
+  | { kind: "text"; text: string; messageId: number; replyToMessageId?: number }
   | { kind: "callback"; callbackId: string; messageId: number; data: string };
 
 const UNKNOWN_MERCHANT_NORMALIZED = normalizeMerchant(UNKNOWN_MERCHANT);
 const CHAT_STATE_TTL_MS = 15 * 60_000;
 const TOP_WINDOW_MS = 90 * 24 * 60 * 60_000;
+export const MAX_PENDING_PROMPTS = 10;
 
 /** Transfers and the reserved `Unknown` merchant never match or create merchant rules. */
 export function canHaveMerchantRule(purchase: StoredPurchase): boolean {
@@ -93,6 +100,20 @@ export async function announcePurchase(
   await store.setPurchaseTelegramMessage(purchase.id, sent.messageId);
 }
 
+/** SPEC §7.4: asks whether a transfer is an expense. */
+export async function announceTransfer(
+  deps: BotDeps,
+  user: User,
+  purchase: StoredPurchase,
+): Promise<void> {
+  const { messageId } = await deps.messenger.send(
+    user.telegramChatId,
+    transferText(user, purchase),
+    transferKeyboard(user.locale, purchase.id),
+  );
+  await deps.store.setPurchaseTelegramMessage(purchase.id, messageId);
+}
+
 /** SPEC §7.3: asks whether an event no rule matched is a purchase. */
 export async function announceUnmatched(
   deps: BotDeps,
@@ -108,7 +129,7 @@ export async function announceUnmatched(
 
 export async function handleBotInput(deps: BotDeps, user: User, input: BotInput): Promise<void> {
   if (input.kind === "callback") await handleCallback(deps, user, input);
-  else await handleText(deps, user, input.text);
+  else await handleText(deps, user, input);
 }
 
 async function handleCallback(
@@ -177,6 +198,24 @@ async function handleCallback(
       );
       return answer();
     }
+    case "transferExpense":
+    case "transferNotExpense":
+      if (purchase.kind !== "transfer" || purchase.status !== "pending") return answer();
+      if (action.type === "transferExpense") {
+        await setState(deps, user, {
+          step: "awaiting_transfer_description",
+          purchaseId: purchase.id,
+        });
+        await messenger.send(
+          chatId,
+          t(user.locale, "askTransferDescription", { amount: amountLabel(user, purchase) }),
+        );
+        return answer();
+      }
+      await store.clearChatState(chatId);
+      await store.excludePurchase(purchase.id);
+      await messenger.edit(chatId, input.messageId, transferNotExpenseText(user, purchase));
+      return answer();
     case "skip":
       await store.clearChatState(chatId);
       await messenger.edit(chatId, input.messageId, pickerText(user, purchase));
@@ -350,12 +389,27 @@ async function handleManualPurchase(
   if (inserted.created) await announcePurchase(deps, user, purchase);
 }
 
-async function handleText(deps: BotDeps, user: User, text: string): Promise<void> {
+async function handleText(
+  deps: BotDeps,
+  user: User,
+  input: Extract<BotInput, { kind: "text" }>,
+): Promise<void> {
   const { store, messenger, clock } = deps;
   const chatId = user.telegramChatId;
-  if (text.startsWith("/start")) {
-    await messenger.send(chatId, t(user.locale, "start"));
+  const { text } = input;
+  const command = parseCommand(text);
+  if (command) {
+    await handleCommand(deps, user, command);
     return;
+  }
+  if (input.replyToMessageId !== undefined) {
+    const replied = await store.findPurchaseByTelegramMessage(user.id, input.replyToMessageId);
+    const comment = text.trim();
+    if (replied && comment) {
+      await store.setPurchaseComment(replied.id, comment);
+      await messenger.acknowledge(chatId, input.messageId);
+      return;
+    }
   }
 
   const state = await store.getChatState(chatId, clock.now());
@@ -372,6 +426,13 @@ async function handleText(deps: BotDeps, user: User, text: string): Promise<void
   const purchase = await store.getPurchase(user.id, state.purchaseId);
   if (!purchase) {
     await store.clearChatState(chatId);
+    return;
+  }
+
+  if (state.step === "awaiting_transfer_description") {
+    await store.clearChatState(chatId);
+    if (purchase.kind !== "transfer" || purchase.status !== "pending") return;
+    await describeTransfer(deps, user, purchase, name);
     return;
   }
 
@@ -399,6 +460,109 @@ async function handleText(deps: BotDeps, user: User, text: string): Promise<void
   const category = await ensureCategory(deps, user, state.categoryName, group.id);
   await store.clearChatState(chatId);
   await applyCategory(deps, user, purchase, category, purchase.telegramMessageId);
+}
+
+/** SPEC §7.5. Unknown commands are ignored. */
+async function handleCommand(deps: BotDeps, user: User, command: Command): Promise<void> {
+  const { messenger } = deps;
+  const { locale, telegramChatId: chatId } = user;
+  switch (command.name) {
+    case "start":
+      await messenger.send(chatId, t(locale, "start"));
+      return;
+    case "help":
+      await messenger.send(chatId, t(locale, "help"));
+      return;
+    case "pending":
+      await resendPending(deps, user);
+      return;
+    case "setgroup":
+      await setGroup(deps, user, command.args);
+      return;
+  }
+}
+
+/** Re-sends the prompt of the oldest pending purchases and transfers. */
+async function resendPending(deps: BotDeps, user: User): Promise<void> {
+  const pending = await deps.store.listPendingPurchases(user.id, MAX_PENDING_PROMPTS);
+  if (pending.length === 0) {
+    await deps.messenger.send(user.telegramChatId, t(user.locale, "nothingPending"));
+    return;
+  }
+  for (const purchase of pending) {
+    if (purchase.kind === "transfer") {
+      await announceTransfer(deps, user, purchase);
+      continue;
+    }
+    const { messageId } = await deps.messenger.send(
+      user.telegramChatId,
+      pickerText(user, purchase),
+      await pickerFor(deps, user, purchase.id, purchase.suggestion),
+    );
+    await deps.store.setPurchaseTelegramMessage(purchase.id, messageId);
+  }
+}
+
+/** `/setgroup <category> <group>`: moves the category, creating the group if missing. */
+async function setGroup(deps: BotDeps, user: User, args: string): Promise<void> {
+  const { store, messenger } = deps;
+  const { locale, telegramChatId: chatId } = user;
+  const words = normalizeText(args).split(" ").filter(Boolean);
+  if (words.length < 2) {
+    await messenger.send(chatId, t(locale, "setGroupUsage"));
+    return;
+  }
+  const categories = await store.listCategories(user.id);
+  const split = splitSetGroupArgs(words.join(" "), (name) =>
+    categories.find((c) => c.name.toLowerCase() === name.toLowerCase()),
+  );
+  if (!split) {
+    const name = words.slice(0, -1).join(" ");
+    await messenger.send(chatId, t(locale, "unknownCategory", { name }));
+    return;
+  }
+  if ([...split.group].length > MAX_NAME_LENGTH) {
+    await messenger.send(chatId, t(locale, "nameTooLong", { max: String(MAX_NAME_LENGTH) }));
+    return;
+  }
+  const group = await store.ensureGroup(user.id, split.group);
+  await store.setCategoryGroup(split.category.id, group.id);
+  await messenger.send(
+    chatId,
+    t(locale, "categoryMoved", { category: split.category.name, group: group.name }),
+  );
+}
+
+/**
+ * The transfer description becomes its merchant, then the transfer message turns into the category
+ * picker. Transfers never create merchant rules (`canHaveMerchantRule`).
+ */
+async function describeTransfer(
+  deps: BotDeps,
+  user: User,
+  transfer: StoredPurchase,
+  description: string,
+): Promise<void> {
+  const { store, messenger } = deps;
+  const described: StoredPurchase = {
+    ...transfer,
+    merchantRaw: description,
+    merchantNormalized: normalizeMerchant(description),
+  };
+  await store.updatePurchaseExtraction(transfer.id, {
+    kind: described.kind,
+    merchantRaw: described.merchantRaw,
+    merchantNormalized: described.merchantNormalized,
+    paymentMethodId: described.paymentMethodId,
+  });
+  const text = pickerText(user, described);
+  const keyboard = await pickerFor(deps, user, described.id, described.suggestion);
+  if (described.telegramMessageId !== null) {
+    await messenger.edit(user.telegramChatId, described.telegramMessageId, text, keyboard);
+  } else {
+    const { messageId } = await messenger.send(user.telegramChatId, text, keyboard);
+    await store.setPurchaseTelegramMessage(described.id, messageId);
+  }
 }
 
 /**

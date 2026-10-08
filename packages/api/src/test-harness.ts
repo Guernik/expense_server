@@ -19,6 +19,8 @@ export interface FakeMessage {
 function createFakeMessenger() {
   const messages: FakeMessage[] = [];
   const toasts: (string | undefined)[] = [];
+  /** User messages the bot acknowledged with a reaction. */
+  const acknowledged: number[] = [];
   const checkKeyboard = (keyboard?: Keyboard) => {
     for (const button of keyboard?.flat() ?? []) {
       if (new TextEncoder().encode(button.data).length >= MAX_CALLBACK_BYTES) {
@@ -42,13 +44,16 @@ function createFakeMessenger() {
     async answerCallback(_callbackId, text) {
       toasts.push(text);
     },
+    async acknowledge(_chatId, messageId) {
+      acknowledged.push(messageId);
+    },
   };
-  return { messenger, messages, toasts };
+  return { messenger, messages, toasts, acknowledged };
 }
 
 export function setup(locale: "en" | "es" = "es", options: { llm?: LlmProvider } = {}) {
   const db = createTestDatabase();
-  const { messenger, messages, toasts } = createFakeMessenger();
+  const { messenger, messages, toasts, acknowledged } = createFakeMessenger();
   const clock = { current: new Date("2026-10-07T01:32:10Z") };
   const tasks: Promise<unknown>[] = [];
   const runtime: Runtime = {
@@ -99,9 +104,17 @@ export function setup(locale: "en" | "es" = "es", options: { llm?: LlmProvider }
     });
     if (response.status !== 200) throw new Error(`Webhook returned ${response.status}`);
   };
-  /** The user types a message in the chat. */
-  const say = (text: string, chatId = CHAT_ID) =>
-    telegram({ message: { chat: { id: chatId }, text } });
+  let userMessageIds = 0;
+  /** The user types a message in the chat, optionally as a reply to a bot message. */
+  const say = (text: string, chatId = CHAT_ID, replyTo?: FakeMessage) =>
+    telegram({
+      message: {
+        message_id: ++userMessageIds,
+        chat: { id: chatId },
+        text,
+        ...(replyTo && { reply_to_message: { message_id: replyTo.messageId } }),
+      },
+    });
   const message = (messageId: number | undefined) =>
     messages.find((m) => m.messageId === messageId);
   const buttons = (m: FakeMessage | undefined) =>
@@ -114,6 +127,7 @@ export function setup(locale: "en" | "es" = "es", options: { llm?: LlmProvider }
     clock,
     messages,
     toasts,
+    acknowledged,
     ingest,
     telegram,
     settled,

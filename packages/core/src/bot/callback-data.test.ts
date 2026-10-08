@@ -13,6 +13,8 @@ const ACTIONS: Action[] = [
   { type: "newGroup", purchaseId: MAX_ID },
   { type: "skip", purchaseId: MAX_ID },
   { type: "notPurchase", purchaseId: MAX_ID },
+  { type: "transferExpense", purchaseId: MAX_ID },
+  { type: "transferNotExpense", purchaseId: MAX_ID },
   { type: "eventPurchase", eventId: MAX_ID },
   { type: "eventNonPurchase", eventId: MAX_ID },
   { type: "ignoreSimilar", eventId: MAX_ID },

@@ -71,6 +71,7 @@ export interface StoredPurchase extends Omit<NewPurchase, "sourceEventId"> {
   status: PurchaseStatus;
   categoryId: number | null;
   paymentMethod: string | null;
+  comment: string | null;
   telegramMessageId: number | null;
   suggestion: Suggestion | null;
 }
@@ -106,6 +107,8 @@ export type ChatState =
   | { step: "awaiting_category_name"; purchaseId: number }
   /** Group buttons are shown too; a tap answers it as well as free text. */
   | { step: "awaiting_group_name"; purchaseId: number; categoryName: string }
+  /** Description typed after `💸 Expense` on a transfer; it becomes the merchant (SPEC §7.4). */
+  | { step: "awaiting_transfer_description"; purchaseId: number }
   /** `<amount> <merchant>` typed after PURCHASE on an unmatched event (SPEC §7.3). */
   | { step: "awaiting_manual_extraction"; eventId: number; messageId: number };
 
@@ -142,6 +145,12 @@ export interface Store {
   setPurchaseSuggestion(purchaseId: number, suggestion: Suggestion): Promise<void>;
   /** The latest purchases the user categorized by hand, newest first (LLM examples). */
   listUserCategorized(userId: number, limit: number): Promise<CategorizedExample[]>;
+  /** The purchase whose current Telegram message is `messageId`. */
+  findPurchaseByTelegramMessage(userId: number, messageId: number): Promise<StoredPurchase | null>;
+  /** Sets or overwrites the purchase's comment. */
+  setPurchaseComment(purchaseId: number, comment: string): Promise<void>;
+  /** `pending` purchases and transfers, oldest first. */
+  listPendingPurchases(userId: number, limit: number): Promise<StoredPurchase[]>;
 
   /** Enabled user rules. Rows that no longer validate against the rule schema are skipped. */
   listUserRules(userId: number): Promise<Rule[]>;
@@ -153,6 +162,8 @@ export interface Store {
   getCategory(userId: number, categoryId: number): Promise<Category | null>;
   findCategoryByName(userId: number, name: string): Promise<Category | null>;
   createCategory(userId: number, name: string, groupId: number): Promise<Category>;
+  /** Moves a category to another group. Purchases are untouched: their group is derived. */
+  setCategoryGroup(categoryId: number, groupId: number): Promise<void>;
   /** All categories, ordered by group name then category name. */
   listCategories(userId: number): Promise<Category[]>;
   /** Categories by number of categorized purchases since `since`, most used first, then by name. */
@@ -186,6 +197,8 @@ export interface Messenger {
   edit(chatId: string, messageId: number, text: string, keyboard?: Keyboard): Promise<void>;
   /** Acknowledges a button tap, optionally with a short toast. */
   answerCallback(callbackId: string, text?: string): Promise<void>;
+  /** Marks a message from the user as handled (SPEC §7.2: the bot reacts ✅). */
+  acknowledge(chatId: string, messageId: number): Promise<void>;
 }
 
 /** What the LLM sees when asked to categorize a purchase (SPEC §7.1 step 2). */

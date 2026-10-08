@@ -15,6 +15,9 @@ export type Action =
   | { type: "skip"; purchaseId: number }
   /** `🚫 Not a purchase` on the picker. */
   | { type: "notPurchase"; purchaseId: number }
+  /** `💸 Expense` / `↔️ Not an expense` on a transfer (SPEC §7.4). */
+  | { type: "transferExpense"; purchaseId: number }
+  | { type: "transferNotExpense"; purchaseId: number }
   /** PURCHASE / NON-PURCHASE on an unmatched event. */
   | { type: "eventPurchase"; eventId: number }
   | { type: "eventNonPurchase"; eventId: number }
@@ -47,6 +50,10 @@ export function encodeAction(action: Action): string {
       return `s:${action.purchaseId}`;
     case "notPurchase":
       return `x:${action.purchaseId}`;
+    case "transferExpense":
+      return `e:${action.purchaseId}`;
+    case "transferNotExpense":
+      return `t:${action.purchaseId}`;
     case "eventPurchase":
       return `b:${action.eventId}`;
     case "eventNonPurchase":
@@ -95,6 +102,10 @@ export function decodeAction(data: string): Action | null {
       return { type: "skip", purchaseId: id };
     case "x":
       return { type: "notPurchase", purchaseId: id };
+    case "e":
+      return { type: "transferExpense", purchaseId: id };
+    case "t":
+      return { type: "transferNotExpense", purchaseId: id };
     case "b":
       return { type: "eventPurchase", eventId: id };
     case "o":
