@@ -2,12 +2,14 @@ import type {
   EventClassification,
   NewEvent,
   NewPurchase,
+  PurchaseExtraction,
+  PurchaseInsert,
   Store,
   StoredEvent,
   StoredPurchase,
   User,
 } from "@denarii/core";
-import { eq } from "drizzle-orm";
+import { and, asc, between, eq, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import * as schema from "./schema";
 
@@ -63,13 +65,70 @@ export function createStore(db: Database): Store {
       return required(row).id;
     },
 
-    async insertPurchase(purchase: NewPurchase): Promise<StoredPurchase> {
-      const [row] = await db
-        .insert(schema.purchases)
-        .values({ ...purchase, occurredAt: purchase.occurredAt.toISOString() })
-        .returning();
-      const stored = required(row);
-      return { ...purchase, id: stored.id, status: stored.status };
+    async insertPurchase(purchase: NewPurchase, window): Promise<PurchaseInsert> {
+      const from = window.from.toISOString();
+      const to = window.to.toISOString();
+      const occurredAt = purchase.occurredAt.toISOString();
+      // One statement, so concurrent duplicates can't both pass the check (D1 serializes writes).
+      const inserted = await db.all<{ id: number; status: StoredPurchase["status"] }>(sql`
+        INSERT INTO purchases (user_id, kind, occurred_at, amount_minor, currency, merchant_raw,
+          merchant_normalized, payment_method_id, source_event_id)
+        SELECT ${purchase.userId}, ${purchase.kind}, ${occurredAt}, ${purchase.amountMinor},
+          ${purchase.currency}, ${purchase.merchantRaw}, ${purchase.merchantNormalized},
+          ${purchase.paymentMethodId}, ${purchase.sourceEventId}
+        WHERE NOT EXISTS (
+          SELECT 1 FROM purchases p JOIN events e ON e.id = p.source_event_id
+          WHERE p.user_id = ${purchase.userId} AND p.amount_minor = ${purchase.amountMinor}
+            AND p.currency = ${purchase.currency} AND e.received_at BETWEEN ${from} AND ${to}
+        )
+        RETURNING id, status`);
+      const [row] = inserted;
+      if (row) return { created: true, purchase: { ...purchase, ...row } };
+
+      const [existing] = await db
+        .select({ purchase: schema.purchases, event: schema.events })
+        .from(schema.purchases)
+        .innerJoin(schema.events, eq(schema.events.id, schema.purchases.sourceEventId))
+        .where(
+          and(
+            eq(schema.purchases.userId, purchase.userId),
+            eq(schema.purchases.amountMinor, purchase.amountMinor),
+            eq(schema.purchases.currency, purchase.currency),
+            between(schema.events.receivedAt, from, to),
+          ),
+        )
+        .orderBy(asc(schema.events.receivedAt), asc(schema.purchases.id))
+        .limit(1);
+      const { purchase: p, event: e } = required(existing);
+      return {
+        created: false,
+        purchase: {
+          id: p.id,
+          userId: p.userId,
+          kind: p.kind,
+          status: p.status,
+          occurredAt: new Date(p.occurredAt),
+          amountMinor: p.amountMinor,
+          currency: p.currency,
+          merchantRaw: p.merchantRaw,
+          merchantNormalized: p.merchantNormalized,
+          paymentMethodId: p.paymentMethodId,
+          sourceEventId: e.id,
+        },
+        sourceEvent: {
+          id: e.id,
+          userId: e.userId,
+          app: e.app,
+          title: e.title,
+          text: e.text,
+          receivedAt: new Date(e.receivedAt),
+          status: e.status,
+        },
+      };
+    },
+
+    async updatePurchaseExtraction(purchaseId: number, extraction: PurchaseExtraction) {
+      await db.update(schema.purchases).set(extraction).where(eq(schema.purchases.id, purchaseId));
     },
 
     async setPurchaseTelegramMessage(purchaseId: number, messageId: number) {
@@ -91,6 +150,6 @@ function toUser(row: typeof schema.users.$inferSelect): User {
 }
 
 function required<T>(row: T | undefined): T {
-  if (row === undefined) throw new Error("Expected a row from RETURNING");
+  if (row === undefined) throw new Error("Expected a row");
   return row;
 }

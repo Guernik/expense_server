@@ -1,6 +1,7 @@
-import type { Messenger } from "@denarii/core";
+import { compileRules, type Messenger, parsePack, processEvent } from "@denarii/core";
 import { createStore, schema } from "@denarii/db";
 import { createTestDatabase } from "@denarii/db/testing";
+import { PACK_SOURCES } from "@denarii/rules";
 import { describe, expect, it } from "vitest";
 import { createApp, type Runtime } from "./app";
 import { parseConfig } from "./config";
@@ -175,6 +176,100 @@ describe("POST /api/ingest", () => {
     await settled();
     expect(db.select().from(schema.paymentMethods).all()).toHaveLength(1);
     expect(db.select().from(schema.purchases).all()).toHaveLength(2);
+  });
+});
+
+describe("dedupe", () => {
+  const at = (time: string) => ({ ...GALICIA_PURCHASE, received_at: `2026-10-07T01:${time}Z` });
+
+  it("merges the same notification posted twice within 30 s", async () => {
+    const { db, sent, ingest, settled } = setup();
+    await ingest(at("32:10"));
+    await ingest(at("32:40"));
+    await settled();
+
+    const purchases = db.select().from(schema.purchases).all();
+    expect(purchases).toHaveLength(1);
+    const events = db.select().from(schema.events).all();
+    expect(events.map((e) => [e.status, e.purchaseId])).toEqual([
+      ["purchase", purchases[0]?.id],
+      ["duplicate", purchases[0]?.id],
+    ]);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("merges an event received before the existing purchase's", async () => {
+    const { db, ingest, settled } = setup();
+    await ingest(at("32:10"));
+    await ingest(at("31:40"));
+    await settled();
+    expect(db.select().from(schema.purchases).all()).toHaveLength(1);
+  });
+
+  it("keeps purchases 31 s apart separate", async () => {
+    const { db, sent, ingest, settled } = setup();
+    await ingest(at("32:10"));
+    await ingest(at("32:41"));
+    await settled();
+    expect(db.select().from(schema.purchases).all()).toHaveLength(2);
+    expect(sent).toHaveLength(2);
+  });
+
+  it("keeps purchases in different currencies separate", async () => {
+    const { db, ingest, settled } = setup();
+    await ingest(at("32:10"));
+    await ingest({ ...at("32:10"), title: "Pagaste USD 15.000,01" });
+    await settled();
+    expect(
+      db
+        .select()
+        .from(schema.purchases)
+        .all()
+        .map((p) => p.currency),
+    ).toEqual(["ARS", "USD"]);
+  });
+
+  it("keeps the extraction with more non-null fields", async () => {
+    const db = createTestDatabase();
+    const store = createStore(db);
+    const messenger: Messenger = { send: async () => ({ messageId: 1 }) };
+    const wallet = parsePack(
+      "test.wallet",
+      `pack: test.wallet
+rules:
+  - id: test.wallet.payment
+    kind: purchase
+    match: { title: '^Pagaste \\$(?<amount>[\\d.,]+)$' }
+    transform: { amount: { number_format: es-AR }, currency: { default: ARS } }
+    tests: [{ title: 'Pagaste $1', text: '', expect: { amount: "1" } }]
+`,
+    );
+    const galicia = parsePack("ar.galicia", PACK_SOURCES["ar.galicia"] ?? "");
+    const rules = compileRules([galicia, wallet]);
+    const user = await store.ensureUser({ telegramChatId: "42", locale: "es", timezone: "UTC" });
+    const receive = async (title: string, text: string, time: string) => {
+      const event = await store.insertEvent({
+        userId: user.id,
+        app: "",
+        title,
+        text,
+        receivedAt: new Date(`2026-10-07T01:${time}Z`),
+      });
+      await processEvent({ store, messenger, rules }, user, event);
+    };
+    const purchases = () =>
+      db
+        .select()
+        .from(schema.purchases)
+        .all()
+        .map((p) => [p.merchantRaw, p.paymentMethodId !== null]);
+
+    await receive("Pagaste $15.000,01", "", "32:10");
+    expect(purchases()).toEqual([["Unknown", false]]);
+    await receive(GALICIA_PURCHASE.title, GALICIA_PURCHASE.text, "32:15");
+    expect(purchases()).toEqual([["AXION VILLA ALLENDE", true]]);
+    await receive("Pagaste $15.000,01", "", "32:20");
+    expect(purchases()).toEqual([["AXION VILLA ALLENDE", true]]);
   });
 });
 

@@ -45,7 +45,19 @@ export interface NewPurchase {
   merchantRaw: string;
   merchantNormalized: string;
   paymentMethodId: number | null;
+  sourceEventId: number;
 }
+
+/** The purchase fields that come from a rule's extraction. */
+export type PurchaseExtraction = Pick<
+  NewPurchase,
+  "kind" | "merchantRaw" | "merchantNormalized" | "paymentMethodId"
+>;
+
+export type PurchaseInsert =
+  | { created: true; purchase: StoredPurchase }
+  /** A purchase in the dedupe window already existed; nothing was inserted. */
+  | { created: false; purchase: StoredPurchase; sourceEvent: StoredEvent };
 
 export interface StoredPurchase extends NewPurchase {
   id: number;
@@ -66,7 +78,12 @@ export interface Store {
   classifyEvent(eventId: number, classification: EventClassification): Promise<void>;
   /** Returns the payment method id for this label, creating it on first sight. */
   upsertPaymentMethod(userId: number, label: string): Promise<number>;
-  insertPurchase(purchase: NewPurchase): Promise<StoredPurchase>;
+  /**
+   * Inserts the purchase unless one of the same user, amount and currency has a source event
+   * received within `window` (dedupe, ADR-0011). Atomic, so concurrent duplicates insert once.
+   */
+  insertPurchase(purchase: NewPurchase, window: { from: Date; to: Date }): Promise<PurchaseInsert>;
+  updatePurchaseExtraction(purchaseId: number, extraction: PurchaseExtraction): Promise<void>;
   setPurchaseTelegramMessage(purchaseId: number, messageId: number): Promise<void>;
 }
 
