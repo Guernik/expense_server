@@ -1,0 +1,51 @@
+# Anonymized Mercado Pago notifications: no personal names.
+# Replayed by rules/fixtures.test.ts with every bundled pack enabled. A classification
+# change fails CI until the expectation here is updated.
+- app: Mercado Pago
+  title: 'Pagaste a SHOWCASE CORDOBA'
+  text: 'Debitamos $ 10.200 de tu cuenta.'
+  expect: { kind: purchase, rule: ar.mercadopago.account-purchase, amount_minor: 1020000, currency: ARS, merchant: SHOWCASE CORDOBA, merchant_normalized: SHOWCASE CORDOBA, payment_method: Mercado Pago cuenta }
+- app: Mercado Pago
+  title: 'Pagaste a Farmacia del Pueblo'
+  text: 'Debitamos $ 19990 de tu cuenta.'
+  expect: { kind: purchase, rule: ar.mercadopago.account-purchase, amount_minor: 1999000, currency: ARS, merchant: Farmacia del Pueblo, merchant_normalized: FARMACIA DEL PUEBLO, payment_method: Mercado Pago cuenta }
+- app: Mercado Pago
+  title: 'Pagaste a Kiosco &amp; Café'
+  text: 'Debitamos $ 2.350,50 de tu cuenta.'
+  expect: { kind: purchase, rule: ar.mercadopago.account-purchase, amount_minor: 235050, currency: ARS, merchant: Kiosco & Café, merchant_normalized: KIOSCO & CAFÉ, payment_method: Mercado Pago cuenta }
+- app: Mercado Pago
+  title: 'Tu pago fue aprobado'
+  text: 'Hiciste un pago por $ 19990.'
+  expect: { kind: purchase, rule: ar.mercadopago.payment-approved, amount_minor: 1999000, currency: ARS, merchant: Unknown, merchant_normalized: UNKNOWN }
+- app: Mercado Pago
+  title: 'Tu factura de luz vence pronto'
+  text: 'Pagala desde Mercado Pago antes del vencimiento.'
+  expect: { kind: ignore, rule: ar.mercadopago.bill-reminder }
+- app: Mercado Pago
+  title: 'Tenés una factura que vence mañana'
+  text: 'Pagá $ 18.450 antes de que venza.'
+  expect: { kind: ignore, rule: ar.mercadopago.bill-reminder }
+- app: Mercado Pago
+  title: 'Recibiste $ 25.000'
+  text: 'Ya tenés el dinero disponible en tu cuenta.'
+  expect: { kind: ignore, rule: ar.mercadopago.income }
+- app: Mercado Pago
+  title: '¡Recibiste plata!'
+  text: 'Te enviaron $ 5.000.'
+  expect: { kind: ignore, rule: ar.mercadopago.income }
+- app: Mercado Pago
+  title: 'Tu dinero ya está disponible'
+  text: 'Ya podés usar $ 12.300 de tu venta.'
+  expect: { kind: ignore, rule: ar.mercadopago.income }
+- app: Mercado Pago
+  title: 'Hubo un problema con tu pago'
+  text: 'No pudimos procesar tu pago de $ 3.500.'
+  expect: { kind: ignore, rule: ar.mercadopago.failed-payment }
+- app: Mercado Pago
+  title: 'No tienes dinero suficiente'
+  text: 'Ingresá dinero para pagar $ 7.990.'
+  expect: { kind: ignore, rule: ar.mercadopago.failed-payment }
+- app: Mercado Pago
+  title: '¡Tenés un descuento esperándote! 🎁'
+  text: 'Pagá con QR y obtené 20% de reintegro.'
+  expect: { kind: unmatched }

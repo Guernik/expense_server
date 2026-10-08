@@ -1,6 +1,7 @@
 export * from "./i18n";
 export * from "./money";
 export * from "./normalize";
+export * from "./occurred-at";
 export * from "./ports";
 export * from "./process-event";
 export * from "./rules/engine";

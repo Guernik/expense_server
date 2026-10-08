@@ -1,6 +1,58 @@
 # Banco Galicia (Argentina) notifications.
 pack: ar.galicia
 rules:
+  # Ignore rules run before purchase/transfer rules (priority 200 > 100).
+  - id: ar.galicia.card-bill-payment
+    kind: ignore
+    priority: 200
+    match:
+      title: '^Pagaste tu tarjeta'
+    tests:
+      - title: 'Pagaste tu tarjeta VISA✅'
+        text: 'Se debitaron $35.239,92 de tu cuenta.'
+
+  - id: ar.galicia.declined
+    kind: ignore
+    priority: 200
+    match:
+      title: '^(Rechazamos tu pago|Rechazo por seguridad|L[ií]mite insuficiente)'
+    tests:
+      - title: 'Rechazamos tu pago de $12.500'
+        text: 'Revisá los datos de tu tarjeta e intentá nuevamente.'
+      - title: 'Rechazo por seguridad'
+        text: 'Rechazamos un pago con tu Visa Crédito 3551.'
+      - title: 'Límite insuficiente'
+        text: 'No pudimos aprobar tu pago de USD 20 con tu Visa Crédito 3440.'
+
+  - id: ar.galicia.savings
+    kind: ignore
+    priority: 200
+    match:
+      title: '^Ahorraste:? '
+    tests:
+      - title: 'Ahorraste: $1.250,00'
+        text: 'Con tu Visa Crédito 3551 en COTO.'
+
+  - id: ar.galicia.purchase-confirmation
+    kind: ignore
+    priority: 200
+    match:
+      title: '^¿?Est[aá]s intentando pagar'
+    tests:
+      - title: '¿Estás intentando pagar $45.000?'
+        text: 'Confirmá si reconocés esta compra con tu Visa Crédito 3551.'
+
+  - id: ar.galicia.card-statement
+    kind: ignore
+    priority: 200
+    match:
+      title: '^(Cerró tu |Tu tarjeta .*vence hoy)'
+    tests:
+      - title: 'Cerró tu Visa'
+        text: 'Ya podés ver el resumen de tu tarjeta terminada en 3551.'
+      - title: 'Tu tarjeta Visa vence hoy'
+        text: 'Pagá tu resumen para evitar intereses.'
+
   - id: ar.galicia.card-purchase
     kind: purchase
     priority: 100
@@ -22,9 +74,25 @@ rules:
       - title: 'Pagaste USD 28,64'
         text: 'A AMAZON MKTPLACE PMTS con tu Visa Crédito: 3440 a las 12:53'
         expect: { amount: "28.64", currency: USD, merchant: AMAZON MKTPLACE PMTS }
+      - title: 'Pagaste USD1.172,30'
+        text: 'A GOOGLE *GOOGLE ONE con tu Visa Crédito: 3440 a las 09:05'
+        expect: { amount: "1172.3", currency: USD, merchant: GOOGLE *GOOGLE ONE }
       - title: 'Pagaste: $9.700'
         text: 'A MERPAGO&#x3D;SUEVIACONFI con tu Amex 0512 a las 12:52'
         expect: { amount: "9700", currency: ARS, merchant: MERPAGO=SUEVIACONFI, payment_method: Galicia Amex 0512 }
       - title: 'Pagaste tu tarjeta VISA✅'
         text: 'Se debitaron $35.239,92 de tu cuenta.'
-        expect_kind: unmatched
+        expect_kind: ignore
+
+  - id: ar.galicia.transfer
+    kind: transfer
+    priority: 100
+    match:
+      title: '^Transferiste:? (?<currency>\$|USD) ?(?<amount>[\d.,]+)$'
+    transform:
+      amount: { number_format: es-AR }
+      currency: { map: { "$": ARS, USD: USD } }
+    tests:
+      - title: 'Transferiste: $300.000'
+        text: 'La transferencia ya está en la cuenta de destino.'
+        expect: { amount: "300000", currency: ARS, merchant: Unknown }

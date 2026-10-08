@@ -13,4 +13,8 @@ describe("bundled rule packs", () => {
   it.each(packs.map((p) => [p.pack, p] as const))("%s passes its inline tests", (_, pack) => {
     expect(runPackTests([pack])).toEqual([]);
   });
+
+  it("pass their inline tests with every pack enabled", () => {
+    expect(runPackTests(packs)).toEqual([]);
+  });
 });

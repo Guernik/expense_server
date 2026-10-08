@@ -1,0 +1,57 @@
+# Anonymized Banco Galicia notifications: last 4 card digits only, no personal names.
+# Replayed by rules/fixtures.test.ts with every bundled pack enabled. A classification
+# change fails CI until the expectation here is updated.
+- title: 'Pagaste $15.000,01'
+  text: 'A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 22:32.'
+  expect: { kind: purchase, rule: ar.galicia.card-purchase, amount_minor: 1500001, currency: ARS, merchant: AXION VILLA ALLENDE, merchant_normalized: AXION VILLA ALLENDE, payment_method: Galicia Visa Crédito 3551, time: "22:32" }
+- title: 'Pagaste $8.420'
+  text: 'A DLO*PedidosYa Propina con tu Visa Crédito 3551 a las 21:47.'
+  expect: { kind: purchase, rule: ar.galicia.card-purchase, amount_minor: 842000, currency: ARS, merchant: DLO*PedidosYa Propina, merchant_normalized: PEDIDOSYA PROPINA, payment_method: Galicia Visa Crédito 3551, time: "21:47" }
+- title: 'Pagaste $32.150,75'
+  text: 'A MERPAGO&#x3D;CARREFOUR con tu Visa Crédito: 3551 a las 11:03.'
+  expect: { kind: purchase, rule: ar.galicia.card-purchase, amount_minor: 3215075, currency: ARS, merchant: MERPAGO=CARREFOUR, merchant_normalized: CARREFOUR, payment_method: Galicia Visa Crédito 3551, time: "11:03" }
+- title: 'Pagaste: $9.700'
+  text: 'A MERPAGO&#x3D;SUEVIACONFI con tu Amex 0512 a las 12:52'
+  expect: { kind: purchase, rule: ar.galicia.card-purchase, amount_minor: 970000, currency: ARS, merchant: MERPAGO=SUEVIACONFI, merchant_normalized: SUEVIACONFI, payment_method: Galicia Amex 0512, time: "12:52" }
+- title: 'Pagaste USD20'
+  text: 'A ANTRHOPIC* CLAUDE SUB con tu Visa Crédito: 3440 a las 18:17'
+  expect: { kind: purchase, rule: ar.galicia.card-purchase, amount_minor: 2000, currency: USD, merchant: ANTRHOPIC* CLAUDE SUB, merchant_normalized: ANTRHOPIC* CLAUDE SUB, payment_method: Galicia Visa Crédito 3440, time: "18:17" }
+- title: 'Pagaste USD 28,64'
+  text: 'A AMAZON MKTPLACE PMTS con tu Visa Crédito: 3440 a las 12:53'
+  expect: { kind: purchase, rule: ar.galicia.card-purchase, amount_minor: 2864, currency: USD, merchant: AMAZON MKTPLACE PMTS, merchant_normalized: AMAZON MKTPLACE PMTS, payment_method: Galicia Visa Crédito 3440, time: "12:53" }
+- title: 'Pagaste USD1.172,30'
+  text: 'A GOOGLE *Google One con tu Visa Crédito: 3440 a las 00:04'
+  expect: { kind: purchase, rule: ar.galicia.card-purchase, amount_minor: 117230, currency: USD, merchant: GOOGLE *Google One, merchant_normalized: GOOGLE *GOOGLE ONE, payment_method: Galicia Visa Crédito 3440, time: "00:04" }
+- title: 'Transferiste: $300.000'
+  text: 'La transferencia ya está en la cuenta de destino.'
+  expect: { kind: transfer, rule: ar.galicia.transfer, amount_minor: 30000000, currency: ARS, merchant: Unknown, merchant_normalized: UNKNOWN }
+- title: 'Pagaste tu tarjeta VISA✅'
+  text: 'Se debitaron $35.239,92 de tu cuenta.'
+  expect: { kind: ignore, rule: ar.galicia.card-bill-payment }
+- title: 'Pagaste tu tarjeta AMEX✅'
+  text: 'Se debitaron USD 41,20 de tu cuenta.'
+  expect: { kind: ignore, rule: ar.galicia.card-bill-payment }
+- title: 'Rechazamos tu pago de $12.500'
+  text: 'Revisá los datos de tu tarjeta e intentá nuevamente.'
+  expect: { kind: ignore, rule: ar.galicia.declined }
+- title: 'Rechazo por seguridad'
+  text: 'Rechazamos un pago con tu Visa Crédito 3551.'
+  expect: { kind: ignore, rule: ar.galicia.declined }
+- title: 'Límite insuficiente'
+  text: 'No pudimos aprobar tu pago de USD 20 con tu Visa Crédito 3440.'
+  expect: { kind: ignore, rule: ar.galicia.declined }
+- title: 'Ahorraste: $1.250,00'
+  text: 'Con tu Visa Crédito 3551 en COTO.'
+  expect: { kind: ignore, rule: ar.galicia.savings }
+- title: '¿Estás intentando pagar $45.000?'
+  text: 'Confirmá si reconocés esta compra con tu Visa Crédito 3551.'
+  expect: { kind: ignore, rule: ar.galicia.purchase-confirmation }
+- title: 'Cerró tu Visa'
+  text: 'Ya podés ver el resumen de tu tarjeta terminada en 3551.'
+  expect: { kind: ignore, rule: ar.galicia.card-statement }
+- title: 'Tu tarjeta Visa vence hoy'
+  text: 'Pagá tu resumen para evitar intereses.'
+  expect: { kind: ignore, rule: ar.galicia.card-statement }
+- title: 'Tu nuevo look, con promo💈✂️'
+  text: 'Miércoles y jueves ahorrá 25% con MODO en peluquerías adheridas.'
+  expect: { kind: unmatched }

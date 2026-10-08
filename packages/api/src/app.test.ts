@@ -24,7 +24,7 @@ function setup(locale: "en" | "es" = "es") {
       TELEGRAM_BOT_TOKEN: "token",
       TELEGRAM_CHAT_ID: "42",
       TELEGRAM_WEBHOOK_SECRET: TELEGRAM_SECRET,
-      RULE_PACKS: "ar.galicia",
+      RULE_PACKS: "ar.galicia,ar.mercadopago",
       LOCALE: locale,
     }),
     store: createStore(db),
@@ -109,6 +109,45 @@ describe("POST /api/ingest", () => {
         text: "🛒 $15.000,01 ARS · AXION VILLA ALLENDE\nGalicia Visa Crédito 3551 · 22:32",
       },
     ]);
+  });
+
+  it("dates the purchase with the notification time, rolling back after midnight", async () => {
+    const { db, ingest, settled } = setup();
+    await ingest({ ...GALICIA_PURCHASE, received_at: "2026-10-05T22:32:10-03:00" });
+    await ingest({
+      ...GALICIA_PURCHASE,
+      text: "A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 23:59.",
+      received_at: "2026-10-06T00:00:20-03:00",
+    });
+    await settled();
+    expect(
+      db
+        .select()
+        .from(schema.purchases)
+        .all()
+        .map((p) => p.occurredAt),
+    ).toEqual(["2026-10-06T01:32:00.000Z", "2026-10-06T02:59:00.000Z"]);
+  });
+
+  it("records a Mercado Pago account purchase", async () => {
+    const { db, sent, ingest, settled } = setup("es");
+    await ingest({
+      app: "Mercado Pago",
+      title: "Pagaste a SHOWCASE CORDOBA",
+      text: "Debitamos $ 10.200 de tu cuenta.",
+      received_at: "2026-10-05T14:05:30-03:00",
+    });
+    await settled();
+    const [purchase] = db.select().from(schema.purchases).all();
+    expect(purchase).toMatchObject({
+      amountMinor: 1020000,
+      currency: "ARS",
+      merchantNormalized: "SHOWCASE CORDOBA",
+      occurredAt: "2026-10-05T17:05:30.000Z",
+    });
+    const [method] = db.select().from(schema.paymentMethods).all();
+    expect(method?.label).toBe("Mercado Pago cuenta");
+    expect(sent[0]?.text).toBe("🛒 $10.200,00 ARS · SHOWCASE CORDOBA\nMercado Pago cuenta · 14:05");
   });
 
   it("formats the notice in English", async () => {
