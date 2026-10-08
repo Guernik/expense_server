@@ -1,0 +1,24 @@
+{
+  "name": "@denarii/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "openapi": "vitest run src/app.test.ts -t OpenAPI -u"
+  },
+  "dependencies": {
+    "@denarii/core": "*",
+    "@denarii/rules": "*",
+    "@hono/zod-openapi": "^1.6.3",
+    "hono": "^4.13.13",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@denarii/db": "*"
+  }
+}

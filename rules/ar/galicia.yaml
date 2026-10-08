@@ -1,0 +1,30 @@
+# Banco Galicia (Argentina) notifications.
+pack: ar.galicia
+rules:
+  - id: ar.galicia.card-purchase
+    kind: purchase
+    priority: 100
+    match:
+      title: '^Pagaste:? (?<currency>\$|USD) ?(?<amount>[\d.,]+)$'
+      text: '^A (?<merchant>.+?) con tu (?<method>.+?):? (?<last4>\d{4}) a las (?<time>\d{2}:\d{2})$'
+    transform:
+      amount: { number_format: es-AR }
+      currency: { map: { "$": ARS, USD: USD } }
+      payment_method: 'Galicia {method} {last4}'
+      strip_prefixes: ['MERPAGO=', 'DLO*']
+    tests:
+      - title: 'Pagaste $15.000,01'
+        text: 'A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 22:32.'
+        expect: { amount: "15000.01", currency: ARS, merchant: AXION VILLA ALLENDE, payment_method: Galicia Visa Crédito 3551, time: "22:32" }
+      - title: 'Pagaste USD20'
+        text: 'A ANTRHOPIC* CLAUDE SUB con tu Visa Crédito: 3440 a las 18:17'
+        expect: { amount: "20", currency: USD, merchant: ANTRHOPIC* CLAUDE SUB, payment_method: Galicia Visa Crédito 3440, time: "18:17" }
+      - title: 'Pagaste USD 28,64'
+        text: 'A AMAZON MKTPLACE PMTS con tu Visa Crédito: 3440 a las 12:53'
+        expect: { amount: "28.64", currency: USD, merchant: AMAZON MKTPLACE PMTS }
+      - title: 'Pagaste: $9.700'
+        text: 'A MERPAGO&#x3D;SUEVIACONFI con tu Amex 0512 a las 12:52'
+        expect: { amount: "9700", currency: ARS, merchant: MERPAGO=SUEVIACONFI, payment_method: Galicia Amex 0512 }
+      - title: 'Pagaste tu tarjeta VISA✅'
+        text: 'Se debitaron $35.239,92 de tu cuenta.'
+        expect_kind: unmatched

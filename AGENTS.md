@@ -8,9 +8,17 @@ Instructions for coding agents working on denarii (repo: `expense_server`).
 - [CONTEXT.md](CONTEXT.md): domain language. Use its terms in code, tests, UI strings and commits.
 - [docs/adr/](docs/adr/): architecture decisions. Don't contradict an accepted ADR. If a change requires it, write a new ADR that supersedes it.
 
-## Project status
+## Commands
 
-Pre-implementation. Only docs exist. Build commands will be added here once the Nx workspace exists.
+- `npm run check`: lint, typecheck and test every project (Nx, cached)
+- `npx nx affected -t lint typecheck test`: same, only projects changed vs `main` (what CI runs)
+- `npx nx test @denarii/core`: one project
+- `npm run format`: format with Biome
+- `npm run generate -w @denarii/db`: generate a Drizzle migration after changing `packages/db/src/schema.ts`
+- `npm run dev -w @denarii/cloudflare`: local Worker with local D1 (secrets in `apps/cloudflare/.dev.vars`, apply migrations first with `npm run migrate:local -w @denarii/cloudflare`)
+- `npm run types -w @denarii/cloudflare`: regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` or `.dev.vars`
+
+Packages import each other's TypeScript sources directly (no build step). Rule packs (`rules/**/*.yaml`) are imported as raw text.
 
 ## Invariants
 
@@ -34,6 +42,6 @@ Pre-implementation. Only docs exist. Build commands will be added here once the 
 
 ## Conventions
 
-- TypeScript, strict mode. Vitest for tests.
+- TypeScript, strict mode. Vitest for tests. Biome for lint and format.
 - Nx + npm workspaces (ADR-0009). Don't introduce Turborepo.
 - The open-source repo is public: never commit secrets, real notification logs, or personal data.
