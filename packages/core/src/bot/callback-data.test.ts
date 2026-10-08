@@ -11,6 +11,12 @@ const ACTIONS: Action[] = [
   { type: "group", purchaseId: MAX_ID, groupId: MAX_ID },
   { type: "newGroup", purchaseId: MAX_ID },
   { type: "skip", purchaseId: MAX_ID },
+  { type: "notPurchase", purchaseId: MAX_ID },
+  { type: "eventPurchase", eventId: MAX_ID },
+  { type: "eventNonPurchase", eventId: MAX_ID },
+  { type: "ignoreSimilar", eventId: MAX_ID },
+  { type: "confirmRule", eventId: MAX_ID },
+  { type: "cancelRule", eventId: MAX_ID },
   { type: "noop" },
 ];
 
@@ -23,7 +29,7 @@ describe("callback data", () => {
     expect(decodeAction(data)).toEqual(action);
   });
 
-  it.each(["", "x", "c:1", "p:1:2", "z:1", "c:a:1", "c:1:2:3"])("rejects %j", (data) => {
+  it.each(["", "x", "c:1", "p:1:2", "q:1", "x:1:2", "c:a:1", "c:1:2:3"])("rejects %j", (data) => {
     expect(decodeAction(data)).toBeNull();
   });
 });

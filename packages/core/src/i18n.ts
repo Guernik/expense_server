@@ -23,6 +23,21 @@ const en = {
   askGroupName: "Name of the new group for {category}?",
   nameTooLong: "Too long. Use at most {max} characters.",
   expired: "This expired. Open the picker again.",
+  purchaseExcluded: "🚫 {amount} · {merchant}\n{details}",
+  notPurchase: "🚫 Not a purchase",
+  unmatchedNotice: '❓ Unrecognized notification{app}\n"{title}"\n"{text}"',
+  eventPurchase: "💳 PURCHASE",
+  eventNonPurchase: "🚫 NON-PURCHASE",
+  askManualPurchase:
+    "Type the amount and merchant, e.g. 15000.50 Axion. Add USD if it was in dollars.",
+  manualPurchaseInvalid: "Couldn't read that. Type the amount and merchant, e.g. 15000.50 Axion.",
+  ignoreSimilar: "🔇 Ignore similar",
+  confirmIgnoreRule: "Ignore notifications whose {field} matches this?\n{pattern}",
+  fieldTitle: "title",
+  fieldText: "text",
+  confirm: "Confirm",
+  cancel: "Cancel",
+  ignoreRuleSaved: "🔇 Similar notifications will be ignored.",
 };
 
 const es: typeof en = {
@@ -44,6 +59,22 @@ const es: typeof en = {
   askGroupName: "¿Nombre del nuevo grupo para {category}?",
   nameTooLong: "Demasiado largo. Usá como máximo {max} caracteres.",
   expired: "Esto expiró. Abrí el selector de nuevo.",
+  purchaseExcluded: "🚫 {amount} · {merchant}\n{details}",
+  notPurchase: "🚫 No es una compra",
+  unmatchedNotice: '❓ Notificación no reconocida{app}\n"{title}"\n"{text}"',
+  eventPurchase: "💳 COMPRA",
+  eventNonPurchase: "🚫 NO ES COMPRA",
+  askManualPurchase:
+    "Escribí el monto y el comercio, por ejemplo 15000,50 Axion. Agregá USD si fue en dólares.",
+  manualPurchaseInvalid:
+    "No lo entendí. Escribí el monto y el comercio, por ejemplo 15000,50 Axion.",
+  ignoreSimilar: "🔇 Ignorar similares",
+  confirmIgnoreRule: "¿Ignorar las notificaciones cuyo {field} coincida con esto?\n{pattern}",
+  fieldTitle: "título",
+  fieldText: "texto",
+  confirm: "Confirmar",
+  cancel: "Cancelar",
+  ignoreRuleSaved: "🔇 Las notificaciones similares se van a ignorar.",
 };
 
 const MESSAGES: Record<Locale, typeof en> = { en, es };

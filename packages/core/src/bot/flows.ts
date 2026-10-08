@@ -1,17 +1,34 @@
+import { dedupeWindow } from "../dedupe";
 import { t } from "../i18n";
 import { normalizeMerchant, normalizeText } from "../normalize";
-import type { Category, ChatState, Clock, Messenger, Store, StoredPurchase, User } from "../ports";
+import type {
+  Category,
+  ChatState,
+  Clock,
+  Messenger,
+  Store,
+  StoredEvent,
+  StoredPurchase,
+  User,
+} from "../ports";
 import { UNKNOWN_MERCHANT } from "../rules/engine";
-import { decodeAction } from "./callback-data";
+import { ignoreSimilarRule, similarMatch } from "../rules/ignore-similar";
+import { type Action, decodeAction } from "./callback-data";
+import { parseManualPurchase } from "./manual-purchase";
 import {
   categoryLabel,
   confirmationKeyboard,
   confirmationText,
+  confirmRuleKeyboard,
+  excludedText,
   groupKeyboard,
+  ignoreSimilarKeyboard,
   morePageKeyboard,
   pickerKeyboard,
   pickerText,
   TOP_CATEGORIES,
+  unmatchedKeyboard,
+  unmatchedText,
 } from "./views";
 
 export interface BotDeps {
@@ -69,6 +86,19 @@ export async function announcePurchase(
   await store.setPurchaseTelegramMessage(purchase.id, sent.messageId);
 }
 
+/** SPEC §7.3: asks whether an event no rule matched is a purchase. */
+export async function announceUnmatched(
+  deps: BotDeps,
+  user: User,
+  event: StoredEvent,
+): Promise<void> {
+  await deps.messenger.send(
+    user.telegramChatId,
+    unmatchedText(user, event),
+    unmatchedKeyboard(user.locale, event.id),
+  );
+}
+
 export async function handleBotInput(deps: BotDeps, user: User, input: BotInput): Promise<void> {
   if (input.kind === "callback") await handleCallback(deps, user, input);
   else await handleText(deps, user, input.text);
@@ -85,6 +115,10 @@ async function handleCallback(
 
   const action = decodeAction(input.data);
   if (!action || action.type === "noop") return answer();
+  if ("eventId" in action) {
+    await handleEventCallback(deps, user, input.messageId, action);
+    return answer();
+  }
   const purchase = await store.getPurchase(user.id, action.purchaseId);
   if (!purchase) return answer();
 
@@ -117,6 +151,18 @@ async function handleCallback(
         ),
       );
       return answer();
+    case "notPurchase": {
+      await store.clearChatState(chatId);
+      await store.excludePurchase(purchase.id);
+      const event = await store.findPurchaseEvent(user.id, purchase.id);
+      await messenger.edit(
+        chatId,
+        input.messageId,
+        excludedText(user, purchase),
+        event ? ignoreSimilarKeyboard(user.locale, event.id) : undefined,
+      );
+      return answer();
+    }
     case "skip":
       await store.clearChatState(chatId);
       await messenger.edit(chatId, input.messageId, pickerText(user, purchase));
@@ -153,6 +199,143 @@ async function handleCallback(
   }
 }
 
+/** PURCHASE / NON-PURCHASE on an unmatched event, and "Ignore similar" (SPEC §7.3). */
+async function handleEventCallback(
+  deps: BotDeps,
+  user: User,
+  messageId: number,
+  action: Extract<Action, { eventId: number }>,
+): Promise<void> {
+  const { store, messenger } = deps;
+  const { locale, telegramChatId: chatId } = user;
+  const event = await store.getEvent(user.id, action.eventId);
+  if (!event) return;
+
+  if (action.type === "eventPurchase" || action.type === "eventNonPurchase") {
+    if (event.status !== "unmatched") return;
+    if (action.type === "eventPurchase") {
+      await setState(deps, user, {
+        step: "awaiting_manual_extraction",
+        eventId: event.id,
+        messageId,
+      });
+      await messenger.send(chatId, t(locale, "askManualPurchase"));
+      return;
+    }
+    await store.classifyEvent(event.id, { status: "non_purchase" });
+    await messenger.edit(
+      chatId,
+      messageId,
+      answeredText(user, event, "eventNonPurchase"),
+      ignoreSimilarKeyboard(locale, event.id),
+    );
+    return;
+  }
+
+  const base = await notPurchaseText(deps, user, event);
+  if (base === null) return;
+  switch (action.type) {
+    case "ignoreSimilar": {
+      const match = similarMatch(event);
+      const [field, pattern] =
+        "title" in match
+          ? (["fieldTitle", match.title] as const)
+          : (["fieldText", match.text] as const);
+      const prompt = t(locale, "confirmIgnoreRule", { field: t(locale, field), pattern });
+      await messenger.edit(
+        chatId,
+        messageId,
+        `${base}\n\n${prompt}`,
+        confirmRuleKeyboard(locale, event.id),
+      );
+      return;
+    }
+    case "confirmRule": {
+      const rule = ignoreSimilarRule(event);
+      const key = JSON.stringify(rule.match);
+      const existing = await store.listUserRules(user.id);
+      if (!existing.some((r) => r.kind === "ignore" && JSON.stringify(r.match) === key)) {
+        await store.insertUserRule(user.id, rule, event.id);
+      }
+      await messenger.edit(chatId, messageId, `${base}\n\n${t(locale, "ignoreRuleSaved")}`);
+      return;
+    }
+    case "cancelRule":
+      await messenger.edit(chatId, messageId, base);
+      return;
+  }
+}
+
+/**
+ * The message of an event the user said is not a purchase: NON-PURCHASE on an unmatched event, or
+ * `🚫 Not a purchase` on its purchase. Null when neither happened, so "Ignore similar" is refused.
+ */
+async function notPurchaseText(
+  deps: BotDeps,
+  user: User,
+  event: StoredEvent,
+): Promise<string | null> {
+  if (event.status === "non_purchase") return answeredText(user, event, "eventNonPurchase");
+  if (event.purchaseId === null) return null;
+  const purchase = await deps.store.getPurchase(user.id, event.purchaseId);
+  return purchase?.status === "excluded" ? excludedText(user, purchase) : null;
+}
+
+/** The unmatched notice followed by the user's answer. */
+function answeredText(
+  user: User,
+  event: StoredEvent,
+  answer: "eventPurchase" | "eventNonPurchase",
+): string {
+  return `${unmatchedText(user, event)}\n\n${t(user.locale, answer)}`;
+}
+
+/** `<amount> <merchant>` after PURCHASE: creates the purchase, then the normal category flow. */
+async function handleManualPurchase(
+  deps: BotDeps,
+  user: User,
+  state: Extract<ChatState, { step: "awaiting_manual_extraction" }>,
+  text: string,
+): Promise<void> {
+  const { store, messenger } = deps;
+  const chatId = user.telegramChatId;
+  const event = await store.getEvent(user.id, state.eventId);
+  if (event?.status !== "unmatched") {
+    await store.clearChatState(chatId);
+    return;
+  }
+  const parsed = parseManualPurchase(text, user.locale);
+  if (!parsed) {
+    await setState(deps, user, state);
+    await messenger.send(chatId, t(user.locale, "manualPurchaseInvalid"));
+    return;
+  }
+
+  await store.clearChatState(chatId);
+  const inserted = await store.insertPurchase(
+    {
+      userId: user.id,
+      kind: "purchase",
+      occurredAt: event.receivedAt,
+      amountMinor: parsed.amountMinor,
+      currency: parsed.currency,
+      merchantRaw: parsed.merchant,
+      merchantNormalized: normalizeMerchant(parsed.merchant),
+      paymentMethodId: null,
+      sourceEventId: event.id,
+    },
+    dedupeWindow(event.receivedAt),
+  );
+  const { purchase } = inserted;
+  await store.classifyEvent(event.id, {
+    status: inserted.created ? "purchase" : "duplicate",
+    purchaseId: purchase.id,
+    extractedBy: "user",
+  });
+  await messenger.edit(chatId, state.messageId, answeredText(user, event, "eventPurchase"));
+  if (inserted.created) await announcePurchase(deps, user, purchase);
+}
+
 async function handleText(deps: BotDeps, user: User, text: string): Promise<void> {
   const { store, messenger, clock } = deps;
   const chatId = user.telegramChatId;
@@ -164,6 +347,10 @@ async function handleText(deps: BotDeps, user: User, text: string): Promise<void
   const state = await store.getChatState(chatId, clock.now());
   const name = normalizeText(text);
   if (!state || !name || name.startsWith("/")) return;
+  if (state.step === "awaiting_manual_extraction") {
+    await handleManualPurchase(deps, user, state, text);
+    return;
+  }
   if ([...name].length > MAX_NAME_LENGTH) {
     await messenger.send(chatId, t(user.locale, "nameTooLong", { max: String(MAX_NAME_LENGTH) }));
     return;

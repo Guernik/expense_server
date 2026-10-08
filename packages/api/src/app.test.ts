@@ -108,15 +108,6 @@ describe("POST /api/ingest", () => {
     );
   });
 
-  it("stores unrecognized notifications as unmatched without messaging", async () => {
-    const { db, messages, ingest, settled } = setup();
-    await ingest({ app: "Galicia", title: "Tu nuevo look 💈", text: "25% off" });
-    await settled();
-    expect(db.select().from(schema.events).all()[0]?.status).toBe("unmatched");
-    expect(db.select().from(schema.purchases).all()).toHaveLength(0);
-    expect(messages).toHaveLength(0);
-  });
-
   it("reuses the payment method for the same label", async () => {
     const { db, ingest, settled } = setup();
     await ingest(GALICIA_PURCHASE);
@@ -202,7 +193,7 @@ rules:
         text,
         receivedAt: new Date(`2026-10-07T01:${time}Z`),
       });
-      await processEvent({ store, messenger, clock, rules }, user, event);
+      await processEvent({ store, messenger, clock, packRules: rules }, user, event);
     };
     const purchases = () =>
       db

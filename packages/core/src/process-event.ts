@@ -1,4 +1,5 @@
-import { announcePurchase, type BotDeps } from "./bot/flows";
+import { announcePurchase, announceUnmatched, type BotDeps } from "./bot/flows";
+import { dedupeWindow } from "./dedupe";
 import { INTL_LOCALE, t } from "./i18n";
 import { formatMoney, toMinor } from "./money";
 import { resolveOccurredAt } from "./occurred-at";
@@ -6,15 +7,14 @@ import type { StoredEvent, User } from "./ports";
 import {
   type CompiledRule,
   classify,
+  compileRules,
   type ExtractedFields,
   UNKNOWN_MERCHANT,
 } from "./rules/engine";
 
-/** Events of the same amount and currency this close together are one purchase (ADR-0011). */
-export const DEDUPE_WINDOW_MS = 30_000;
-
 export interface ProcessDeps extends BotDeps {
-  rules: CompiledRule[];
+  /** Compiled enabled packs. User rules are loaded per event and evaluated first (ADR-0003). */
+  packRules: CompiledRule[];
 }
 
 /** Classifies a stored event and, for purchases and transfers, records and announces them. */
@@ -23,11 +23,14 @@ export async function processEvent(
   user: User,
   event: StoredEvent,
 ): Promise<void> {
-  const { store, messenger, rules } = deps;
+  const { store, messenger, packRules } = deps;
+  const userRules = compileRules([], await store.listUserRules(user.id));
+  const rules = [...userRules, ...packRules];
   const result = classify(rules, event);
 
   if (result.kind === "unmatched") {
     await store.classifyEvent(event.id, { status: "unmatched" });
+    await announceUnmatched(deps, user, event);
     return;
   }
   const ruleRef = { ruleId: result.rule.rule.id, ruleSource: result.rule.source };
@@ -46,7 +49,6 @@ export async function processEvent(
     merchantNormalized: fields.merchantNormalized,
     paymentMethodId,
   };
-  const received = event.receivedAt.getTime();
   const inserted = await store.insertPurchase(
     {
       userId: user.id,
@@ -56,7 +58,7 @@ export async function processEvent(
       sourceEventId: event.id,
       ...extraction,
     },
-    { from: new Date(received - DEDUPE_WINDOW_MS), to: new Date(received + DEDUPE_WINDOW_MS) },
+    dedupeWindow(event.receivedAt),
   );
   const { purchase } = inserted;
 
@@ -71,10 +73,16 @@ export async function processEvent(
       status: "duplicate",
       ...ruleRef,
       purchaseId: purchase.id,
+      extractedBy: "regex",
     });
     return;
   }
-  await store.classifyEvent(event.id, { status: result.kind, ...ruleRef, purchaseId: purchase.id });
+  await store.classifyEvent(event.id, {
+    status: result.kind,
+    ...ruleRef,
+    purchaseId: purchase.id,
+    extractedBy: "regex",
+  });
 
   if (result.kind === "purchase") {
     await announcePurchase(deps, user, purchase);

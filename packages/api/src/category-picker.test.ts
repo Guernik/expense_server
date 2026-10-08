@@ -4,7 +4,10 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { GALICIA_PURCHASE, setup } from "./test-harness";
 
-const PICKER_EMPTY = [["Más…", "➕ Nueva categoría"], ["Omitir"]];
+const PICKER_EMPTY = [
+  ["Más…", "➕ Nueva categoría"],
+  ["🚫 No es una compra", "Omitir"],
+];
 
 type Harness = ReturnType<typeof setup>;
 

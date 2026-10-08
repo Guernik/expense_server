@@ -1,6 +1,7 @@
 import { INTL_LOCALE, type Locale, t } from "../i18n";
 import { formatMoney } from "../money";
-import type { Category, Group, Keyboard, StoredPurchase, User } from "../ports";
+import { normalizeBody, normalizeText } from "../normalize";
+import type { Category, Group, Keyboard, StoredEvent, StoredPurchase, User } from "../ports";
 import { encodeAction } from "./callback-data";
 
 export const TOP_CATEGORIES = 6;
@@ -25,6 +26,48 @@ export function confirmationText(user: User, purchase: StoredPurchase, category:
   );
 }
 
+/** SPEC §7.2b after `🚫 Not a purchase`: the picker header marked 🚫. */
+export function excludedText(user: User, purchase: StoredPurchase): string {
+  return t(user.locale, "purchaseExcluded", headerParams(user, purchase));
+}
+
+/** SPEC §7.3: `❓ Unrecognized notification (app)` / "title" / "text". */
+export function unmatchedText(user: User, event: StoredEvent): string {
+  const app = normalizeText(event.app);
+  return t(user.locale, "unmatchedNotice", {
+    app: app ? ` (${app})` : "",
+    title: normalizeText(event.title),
+    text: normalizeBody(event.text),
+  });
+}
+
+export function unmatchedKeyboard(locale: Locale, eventId: number): Keyboard {
+  return [
+    [
+      { text: t(locale, "eventPurchase"), data: encodeAction({ type: "eventPurchase", eventId }) },
+      {
+        text: t(locale, "eventNonPurchase"),
+        data: encodeAction({ type: "eventNonPurchase", eventId }),
+      },
+    ],
+  ];
+}
+
+export function ignoreSimilarKeyboard(locale: Locale, eventId: number): Keyboard {
+  return [
+    [{ text: t(locale, "ignoreSimilar"), data: encodeAction({ type: "ignoreSimilar", eventId }) }],
+  ];
+}
+
+export function confirmRuleKeyboard(locale: Locale, eventId: number): Keyboard {
+  return [
+    [
+      { text: t(locale, "confirm"), data: encodeAction({ type: "confirmRule", eventId }) },
+      { text: t(locale, "cancel"), data: encodeAction({ type: "cancelRule", eventId }) },
+    ],
+  ];
+}
+
 function headerParams(user: User, purchase: StoredPurchase, category?: string) {
   const intlLocale = INTL_LOCALE[user.locale];
   const time = new Intl.DateTimeFormat(intlLocale, {
@@ -44,7 +87,7 @@ export function confirmationKeyboard(locale: Locale, purchaseId: number): Keyboa
   return [[{ text: t(locale, "change"), data: encodeAction({ type: "picker", purchaseId }) }]];
 }
 
-/** Top categories, then `More…` `➕ New category`, then `Skip`. */
+/** Top categories, then `More…` `➕ New category`, then `🚫 Not a purchase` `Skip`. */
 export function pickerKeyboard(locale: Locale, purchaseId: number, top: Category[]): Keyboard {
   return [
     ...chunk(
@@ -57,7 +100,10 @@ export function pickerKeyboard(locale: Locale, purchaseId: number, top: Category
       { text: t(locale, "more"), data: encodeAction({ type: "more", purchaseId, page: 0 }) },
       { text: t(locale, "newCategory"), data: encodeAction({ type: "newCategory", purchaseId }) },
     ],
-    [{ text: t(locale, "skip"), data: encodeAction({ type: "skip", purchaseId }) }],
+    [
+      { text: t(locale, "notPurchase"), data: encodeAction({ type: "notPurchase", purchaseId }) },
+      { text: t(locale, "skip"), data: encodeAction({ type: "skip", purchaseId }) },
+    ],
   ];
 }
 
