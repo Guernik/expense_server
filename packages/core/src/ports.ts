@@ -109,8 +109,26 @@ export type ChatState =
   | { step: "awaiting_group_name"; purchaseId: number; categoryName: string }
   /** Description typed after `💸 Expense` on a transfer; it becomes the merchant (SPEC §7.4). */
   | { step: "awaiting_transfer_description"; purchaseId: number }
-  /** `<amount> <merchant>` typed after PURCHASE on an unmatched event (SPEC §7.3). */
-  | { step: "awaiting_manual_extraction"; eventId: number; messageId: number };
+  /**
+   * `<amount> <merchant>` typed after PURCHASE on an unmatched event (SPEC §7.3). `extraction` is
+   * the LLM's, shown with `✅ Correct` / `✏️ Edit`; typing answers it like `Edit`.
+   */
+  | {
+      step: "awaiting_manual_extraction";
+      eventId: number;
+      messageId: number;
+      extraction?: ConfirmedFields;
+    };
+
+/** Purchase fields the user confirmed for an unmatched event: typed, or the LLM's extraction. */
+export interface ConfirmedFields {
+  amountMinor: number;
+  currency: Currency;
+  merchant: string;
+  paymentMethod: string | null;
+  /** `HH:MM`, local time. */
+  time: string | null;
+}
 
 export interface EventClassification {
   status: EventStatus;
@@ -162,7 +180,20 @@ export interface Store {
 
   /** Enabled user rules. Rows that no longer validate against the rule schema are skipped. */
   listUserRules(userId: number): Promise<Rule[]>;
-  insertUserRule(userId: number, rule: Rule, createdFromEventId: number | null): Promise<void>;
+  /**
+   * `enabled: false` stores an LLM rule proposal waiting for `Save rule`: never evaluated until
+   * enabled (SPEC §7.3).
+   */
+  insertUserRule(
+    userId: number,
+    rule: Rule,
+    createdFromEventId: number | null,
+    options?: { enabled?: boolean },
+  ): Promise<void>;
+  /** The disabled rule proposed for this event, if any. */
+  findProposedRule(userId: number, eventId: number): Promise<{ id: number; rule: Rule } | null>;
+  enableUserRule(ruleId: number): Promise<void>;
+  deleteUserRule(ruleId: number): Promise<void>;
 
   listGroups(userId: number): Promise<Group[]>;
   /** Returns the group with this name (case-insensitive), creating it if missing. */
@@ -238,6 +269,55 @@ export interface SuggestCategoryOutput {
  */
 export interface LlmProvider {
   suggestCategory(input: SuggestCategoryInput): Promise<SuggestCategoryOutput>;
+  /** Only after the user answered PURCHASE on an unmatched event (SPEC §7.3 step 1). */
+  extractPurchase(input: ExtractPurchaseInput): Promise<ExtractPurchaseOutput>;
+  /** Only after the user confirmed the fields (SPEC §7.3 step 2). */
+  proposeRule(input: ProposeRuleInput): Promise<ProposeRuleOutput>;
+}
+
+/** An unmatched event the user said is a purchase, normalized as the classifier sees it. */
+export interface ExtractPurchaseInput {
+  app: string;
+  title: string;
+  text: string;
+}
+
+/** Raw structured LLM output. Validated by the core before it is shown. */
+export interface ExtractPurchaseOutput {
+  /** Decimal with `.` as the separator, no thousands separator, e.g. `15000.01`. */
+  amount?: string | null;
+  currency?: string | null;
+  merchant?: string | null;
+  paymentMethod?: string | null;
+  time?: string | null;
+}
+
+export interface ProposeRuleInput extends ExtractPurchaseInput {
+  /** The fields the rule must reproduce. `amount` as a decimal string, e.g. `15000.01`. */
+  confirmed: {
+    amount: string;
+    currency: Currency;
+    merchant: string;
+    paymentMethod: string | null;
+    time: string | null;
+  };
+}
+
+/**
+ * Raw structured LLM output: a `purchase` rule's match patterns (named groups) and transform. The
+ * core builds the rule and validates it against the event before offering it.
+ */
+export interface ProposeRuleOutput {
+  title?: string | null;
+  text?: string | null;
+  numberFormat?: string | null;
+  /** Captured `currency` token to ISO code, e.g. `{ "$": "ARS" }`. */
+  currencyMap?: Record<string, string> | null;
+  defaultCurrency?: string | null;
+  /** Template with `{group}` placeholders, or a literal. */
+  paymentMethod?: string | null;
+  /** Literal merchant, when the notification names none. */
+  merchant?: string | null;
 }
 
 export interface Clock {

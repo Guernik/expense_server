@@ -20,6 +20,12 @@ function fakeLlm(answer: SuggestCategoryOutput | Error) {
       if (answer instanceof Error) throw answer;
       return answer;
     },
+    async extractPurchase() {
+      throw new Error("not used");
+    },
+    async proposeRule() {
+      throw new Error("not used");
+    },
   };
   return { llm, calls };
 }

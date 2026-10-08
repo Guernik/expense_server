@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoney, parseAmount, toMinor } from "./money";
+import { formatMoney, fromMinor, parseAmount, toMinor } from "./money";
 
 describe("parseAmount", () => {
   it.each([
@@ -35,5 +35,17 @@ describe("formatMoney", () => {
   it("formats per locale with currency code", () => {
     expect(formatMoney(1500001, "ARS", "es-AR")).toBe("$15.000,01 ARS");
     expect(formatMoney(2000, "USD", "en-US")).toBe("US$20.00 USD");
+  });
+});
+
+describe("fromMinor", () => {
+  it.each([
+    [1500001, "15000.01"],
+    [1500050, "15000.5"],
+    [2000, "20"],
+    [5, "0.05"],
+  ])("%i -> %s", (minor, decimal) => {
+    expect(fromMinor(minor, "ARS")).toBe(decimal);
+    expect(toMinor(decimal, "ARS")).toBe(minor);
   });
 });

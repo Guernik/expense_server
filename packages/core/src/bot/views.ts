@@ -1,7 +1,16 @@
 import { INTL_LOCALE, type Locale, t } from "../i18n";
 import { formatMoney } from "../money";
 import { normalizeBody, normalizeText } from "../normalize";
-import type { Category, Group, Keyboard, StoredEvent, StoredPurchase, User } from "../ports";
+import type {
+  Category,
+  ConfirmedFields,
+  Group,
+  Keyboard,
+  StoredEvent,
+  StoredPurchase,
+  User,
+} from "../ports";
+import type { Rule } from "../rules/schema";
 import { encodeAction } from "./callback-data";
 
 export const TOP_CATEGORIES = 6;
@@ -92,6 +101,49 @@ export function confirmRuleKeyboard(locale: Locale, eventId: number): Keyboard {
     [
       { text: t(locale, "confirm"), data: encodeAction({ type: "confirmRule", eventId }) },
       { text: t(locale, "cancel"), data: encodeAction({ type: "cancelRule", eventId }) },
+    ],
+  ];
+}
+
+/** SPEC §7.3 step 1: the LLM extraction, for `✅ Correct` / `✏️ Edit`. */
+export function extractionText(user: User, fields: ConfirmedFields): string {
+  const details = [fields.paymentMethod, fields.time].filter(Boolean).join(" · ");
+  return t(user.locale, "extractionNotice", {
+    amount: formatMoney(fields.amountMinor, fields.currency, INTL_LOCALE[user.locale]),
+    merchant: fields.merchant,
+    details: details ? `\n${details}` : "",
+  });
+}
+
+export function extractionKeyboard(locale: Locale, eventId: number): Keyboard {
+  return [
+    [
+      {
+        text: t(locale, "extractionCorrect"),
+        data: encodeAction({ type: "extractionCorrect", eventId }),
+      },
+      {
+        text: t(locale, "extractionEdit"),
+        data: encodeAction({ type: "extractionEdit", eventId }),
+      },
+    ],
+  ];
+}
+
+/** SPEC §7.3 step 2: the proposed rule's patterns, one `field: pattern` line each. */
+export function ruleProposalText(locale: Locale, rule: Rule): string {
+  const patterns = [
+    rule.match.title && `${t(locale, "fieldTitle")}: ${rule.match.title}`,
+    rule.match.text && `${t(locale, "fieldText")}: ${rule.match.text}`,
+  ].filter(Boolean);
+  return t(locale, "ruleProposal", { patterns: patterns.join("\n") });
+}
+
+export function ruleProposalKeyboard(locale: Locale, eventId: number): Keyboard {
+  return [
+    [
+      { text: t(locale, "saveRule"), data: encodeAction({ type: "saveRule", eventId }) },
+      { text: t(locale, "rejectRule"), data: encodeAction({ type: "rejectRule", eventId }) },
     ],
   ];
 }

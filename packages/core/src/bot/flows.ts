@@ -1,10 +1,13 @@
 import { dedupeWindow } from "../dedupe";
 import { t } from "../i18n";
 import { normalizeMerchant, normalizeText } from "../normalize";
+import { resolveOccurredAt } from "../occurred-at";
 import type {
   Category,
   ChatState,
   Clock,
+  ConfirmedFields,
+  ExtractedBy,
   LlmProvider,
   Messenger,
   Store,
@@ -16,6 +19,7 @@ import { UNKNOWN_MERCHANT } from "../rules/engine";
 import { ignoreSimilarRule, similarMatch } from "../rules/ignore-similar";
 import { type Action, decodeAction } from "./callback-data";
 import { type Command, parseCommand, splitSetGroupArgs } from "./commands";
+import { extractPurchase, proposeRule } from "./llm-extraction";
 import { parseManualPurchase } from "./manual-purchase";
 import { suggestCategory, suggestionLabel } from "./suggestion";
 import {
@@ -25,12 +29,16 @@ import {
   confirmationText,
   confirmRuleKeyboard,
   excludedText,
+  extractionKeyboard,
+  extractionText,
   groupKeyboard,
   ignoreSimilarKeyboard,
   MAX_NAME_LENGTH,
   morePageKeyboard,
   pickerKeyboard,
   pickerText,
+  ruleProposalKeyboard,
+  ruleProposalText,
   TOP_CATEGORIES,
   transferKeyboard,
   transferNotExpenseText,
@@ -144,8 +152,7 @@ async function handleCallback(
   const action = decodeAction(input.data);
   if (!action || action.type === "noop") return answer();
   if ("eventId" in action) {
-    await handleEventCallback(deps, user, input.messageId, action);
-    return answer();
+    return answer(await handleEventCallback(deps, user, input.messageId, action));
   }
   const purchase = await store.getPurchase(user.id, action.purchaseId);
   if (!purchase) return answer();
@@ -252,14 +259,17 @@ async function handleCallback(
   }
 }
 
-/** PURCHASE / NON-PURCHASE on an unmatched event, and "Ignore similar" (SPEC §7.3). */
+/**
+ * PURCHASE / NON-PURCHASE on an unmatched event, the LLM extraction and rule proposal, and "Ignore
+ * similar" (SPEC §7.3). Returns a toast for the tap, if any.
+ */
 async function handleEventCallback(
   deps: BotDeps,
   user: User,
   messageId: number,
   action: Extract<Action, { eventId: number }>,
-): Promise<void> {
-  const { store, messenger } = deps;
+): Promise<string | undefined> {
+  const { store, messenger, clock } = deps;
   const { locale, telegramChatId: chatId } = user;
   const event = await store.getEvent(user.id, action.eventId);
   if (!event) return;
@@ -267,12 +277,22 @@ async function handleEventCallback(
   if (action.type === "eventPurchase" || action.type === "eventNonPurchase") {
     if (event.status !== "unmatched") return;
     if (action.type === "eventPurchase") {
+      const extraction = await extractPurchase(deps.llm, event);
       await setState(deps, user, {
         step: "awaiting_manual_extraction",
         eventId: event.id,
         messageId,
+        ...(extraction && { extraction }),
       });
-      await messenger.send(chatId, t(locale, "askManualPurchase"));
+      if (extraction) {
+        await messenger.send(
+          chatId,
+          extractionText(user, extraction),
+          extractionKeyboard(locale, event.id),
+        );
+      } else {
+        await messenger.send(chatId, t(locale, "askManualPurchase"));
+      }
       return;
     }
     await store.classifyEvent(event.id, { status: "non_purchase" });
@@ -282,6 +302,44 @@ async function handleEventCallback(
       answeredText(user, event, "eventNonPurchase"),
       ignoreSimilarKeyboard(locale, event.id),
     );
+    return;
+  }
+
+  if (action.type === "extractionCorrect" || action.type === "extractionEdit") {
+    const state = await store.getChatState(chatId, clock.now());
+    if (
+      event.status !== "unmatched" ||
+      state?.step !== "awaiting_manual_extraction" ||
+      state.eventId !== event.id ||
+      !state.extraction
+    ) {
+      return t(locale, "expired");
+    }
+    await messenger.edit(chatId, messageId, extractionText(user, state.extraction));
+    if (action.type === "extractionCorrect") {
+      await recordConfirmedPurchase(deps, user, event, state.messageId, state.extraction, "llm");
+      return;
+    }
+    await setState(deps, user, {
+      step: "awaiting_manual_extraction",
+      eventId: event.id,
+      messageId: state.messageId,
+    });
+    await messenger.send(chatId, t(locale, "askManualPurchase"));
+    return;
+  }
+
+  if (action.type === "saveRule" || action.type === "rejectRule") {
+    const proposed = await store.findProposedRule(user.id, event.id);
+    if (!proposed) return;
+    const text = ruleProposalText(locale, proposed.rule);
+    if (action.type === "saveRule") {
+      await store.enableUserRule(proposed.id);
+      await messenger.edit(chatId, messageId, `${text}\n\n${t(locale, "ruleSaved")}`);
+    } else {
+      await store.deleteUserRule(proposed.id);
+      await messenger.edit(chatId, messageId, `${text}\n\n${t(locale, "ruleRejected")}`);
+    }
     return;
   }
 
@@ -343,7 +401,7 @@ function answeredText(
   return `${unmatchedText(user, event)}\n\n${t(user.locale, answer)}`;
 }
 
-/** `<amount> <merchant>` after PURCHASE: creates the purchase, then the normal category flow. */
+/** `<amount> <merchant>` typed after PURCHASE, or after `✏️ Edit` on the LLM extraction. */
 async function handleManualPurchase(
   deps: BotDeps,
   user: User,
@@ -364,17 +422,57 @@ async function handleManualPurchase(
     return;
   }
 
+  await recordConfirmedPurchase(
+    deps,
+    user,
+    event,
+    state.messageId,
+    { ...parsed, paymentMethod: null, time: null },
+    "user",
+  );
+}
+
+/**
+ * The user confirmed the fields of an unmatched event (SPEC §7.3): offers the LLM's rule proposal
+ * if it validates, then dedupe and the normal category flow.
+ */
+async function recordConfirmedPurchase(
+  deps: BotDeps,
+  user: User,
+  event: StoredEvent,
+  noticeMessageId: number,
+  fields: ConfirmedFields,
+  extractedBy: ExtractedBy,
+): Promise<void> {
+  const { store, messenger } = deps;
+  const chatId = user.telegramChatId;
   await store.clearChatState(chatId);
+  await messenger.edit(chatId, noticeMessageId, answeredText(user, event, "eventPurchase"));
+
+  const rule = await proposeRule(deps.llm, event, fields);
+  if (rule) {
+    // Disabled until `Save rule`: classification never uses it before the user confirms.
+    await store.insertUserRule(user.id, rule, event.id, { enabled: false });
+    await messenger.send(
+      chatId,
+      ruleProposalText(user.locale, rule),
+      ruleProposalKeyboard(user.locale, event.id),
+    );
+  }
+
+  const paymentMethodId = fields.paymentMethod
+    ? await store.upsertPaymentMethod(user.id, fields.paymentMethod)
+    : null;
   const inserted = await store.insertPurchase(
     {
       userId: user.id,
       kind: "purchase",
-      occurredAt: event.receivedAt,
-      amountMinor: parsed.amountMinor,
-      currency: parsed.currency,
-      merchantRaw: parsed.merchant,
-      merchantNormalized: normalizeMerchant(parsed.merchant),
-      paymentMethodId: null,
+      occurredAt: resolveOccurredAt(event.receivedAt, fields.time ?? undefined, user.timezone),
+      amountMinor: fields.amountMinor,
+      currency: fields.currency,
+      merchantRaw: fields.merchant,
+      merchantNormalized: normalizeMerchant(fields.merchant),
+      paymentMethodId,
       sourceEventId: event.id,
     },
     dedupeWindow(event.receivedAt),
@@ -383,9 +481,8 @@ async function handleManualPurchase(
   await store.classifyEvent(event.id, {
     status: inserted.created ? "purchase" : "duplicate",
     purchaseId: purchase.id,
-    extractedBy: "user",
+    extractedBy,
   });
-  await messenger.edit(chatId, state.messageId, answeredText(user, event, "eventPurchase"));
   if (inserted.created) await announcePurchase(deps, user, purchase);
 }
 

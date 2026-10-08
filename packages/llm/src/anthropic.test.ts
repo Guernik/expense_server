@@ -134,6 +134,94 @@ describe("Anthropic provider", () => {
   });
 });
 
+const NOTIFICATION = {
+  app: "Naranja X",
+  title: "Compraste con tu tarjeta",
+  text: "Pagaste $ 4.250,50 en FARMACIA CENTRAL con Visa 1234 a las 14:05",
+};
+
+describe("Anthropic extractPurchase", () => {
+  it("sends the notification and maps the structured output", async () => {
+    const { fetch, requests } = fakeFetch(() =>
+      messageResponse({
+        amount: "4250.50",
+        currency: "ARS",
+        merchant: "FARMACIA CENTRAL",
+        payment_method: "Visa 1234",
+        time: "14:05",
+      }),
+    );
+    await expect(
+      createAnthropicProvider({ apiKey: "k", fetch }).extractPurchase(NOTIFICATION),
+    ).resolves.toEqual({
+      amount: "4250.50",
+      currency: "ARS",
+      merchant: "FARMACIA CENTRAL",
+      paymentMethod: "Visa 1234",
+      time: "14:05",
+    });
+    expect(requests[0]?.body).toMatchObject({
+      model: "claude-haiku-4-5",
+      output_config: { format: { type: "json_schema" } },
+    });
+    const prompt = JSON.stringify(requests[0]?.body.messages);
+    expect(prompt).toContain("Compraste con tu tarjeta");
+    expect(prompt).toContain("FARMACIA CENTRAL con Visa 1234");
+  });
+
+  it("rejects on an API error", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { fetch } = fakeFetch(() =>
+      Response.json(
+        { type: "error", error: { type: "api_error", message: "boom" } },
+        { status: 500 },
+      ),
+    );
+    await expect(
+      createAnthropicProvider({ apiKey: "k", fetch }).extractPurchase(NOTIFICATION),
+    ).rejects.toThrow();
+  });
+});
+
+describe("Anthropic proposeRule", () => {
+  it("sends the confirmed fields and maps the currency map", async () => {
+    const { fetch, requests } = fakeFetch(() =>
+      messageResponse({
+        title: "^Compraste con tu tarjeta$",
+        text: "^Pagaste (?<currency>\\$) (?<amount>[\\d.,]+) en (?<merchant>.+)$",
+        number_format: "es-AR",
+        currency_map: [{ token: "$", currency: "ARS" }],
+        default_currency: null,
+        payment_method: null,
+        merchant: null,
+      }),
+    );
+    const output = await createAnthropicProvider({ apiKey: "k", fetch }).proposeRule({
+      ...NOTIFICATION,
+      confirmed: {
+        amount: "4250.5",
+        currency: "ARS",
+        merchant: "FARMACIA CENTRAL",
+        paymentMethod: null,
+        time: "14:05",
+      },
+    });
+    expect(output).toEqual({
+      title: "^Compraste con tu tarjeta$",
+      text: "^Pagaste (?<currency>\\$) (?<amount>[\\d.,]+) en (?<merchant>.+)$",
+      numberFormat: "es-AR",
+      currencyMap: { $: "ARS" },
+      defaultCurrency: null,
+      paymentMethod: null,
+      merchant: null,
+    });
+    const prompt = JSON.stringify(requests[0]?.body.messages);
+    for (const part of ["amount: 4250.5", "merchant: FARMACIA CENTRAL", "payment method: none"]) {
+      expect(prompt).toContain(part);
+    }
+  });
+});
+
 describe("createLlmProvider", () => {
   it("returns no provider for none", () => {
     expect(createLlmProvider({ LLM_PROVIDER: "none" })).toBeUndefined();
