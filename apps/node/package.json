@@ -1,0 +1,19 @@
+{
+  "name": "@denarii/node",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "start": "tsx --import ./src/register.mjs src/main.ts"
+  },
+  "dependencies": {
+    "@denarii/api": "*",
+    "@denarii/db": "*",
+    "@denarii/llm": "*",
+    "@hono/node-server": "^2.1.4",
+    "node-cron": "^4.6.0",
+    "tsx": "^4.23.15"
+  }
+}

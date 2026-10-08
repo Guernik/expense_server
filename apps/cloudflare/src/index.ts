@@ -11,6 +11,9 @@ import { drizzle } from "drizzle-orm/d1";
 
 function runtime(env: Env, ctx: Pick<ExecutionContext, "waitUntil">): Runtime {
   const config = parseConfig(env);
+  if (config.TELEGRAM_MODE !== "webhook") {
+    throw new Error("TELEGRAM_MODE=polling is not supported on Cloudflare; use webhook");
+  }
   return {
     config,
     store: createStore(drizzle(env.DB, { schema })),
