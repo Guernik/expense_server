@@ -4,15 +4,7 @@ Codename **denarii**. Turns phone payment notifications into categorized expense
 
 ## How it works
 
-```mermaid
-flowchart LR
-  phone["Phone<br/>bank / wallet app"] -- notification --> macrodroid[MacroDroid]
-  macrodroid -- HTTP POST --> denarii["denarii<br/>classify · dedupe · categorize"]
-  denarii -- purchase, asks for category --> telegram[Telegram bot]
-  telegram -- your answer --> denarii
-  telegram <--> you((You))
-  denarii --> db[(Expenses)]
-```
+![denarii overview](docs/diagrams/overview-light.png)
 
 ## Architecture
 
