@@ -36,25 +36,35 @@ export const OPENAPI_INFO = {
 
 const ErrorBody = z.object({ error: z.string() }).openapi("Error");
 
-const IngestBody = z
-  .object({
-    app: z.string().default("").openapi({
-      description: "Originating app name (MacroDroid `[notification_app_name]`). Informational.",
-      example: "Galicia",
-    }),
-    title: z
-      .string()
-      .openapi({ description: "Notification title.", example: "Pagaste $15.000,01" }),
-    text: z.string().openapi({
-      description: "Notification text.",
-      example: "A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 22:32.",
-    }),
-    received_at: z.iso.datetime({ offset: true }).optional().openapi({
-      description: "When the phone received the notification. Defaults to server receive time.",
+const EPOCH = /^\d{10}(\d{3})?$/;
+
+const IngestFields = z.object({
+  app: z.string().default("").openapi({
+    description: "Originating app name. Informational.",
+    example: "Galicia",
+  }),
+  title: z.string().openapi({ description: "Notification title.", example: "Pagaste $15.000,01" }),
+  text: z.string().openapi({
+    description: "Notification text.",
+    example: "A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 22:32.",
+  }),
+  received_at: z
+    .union([z.iso.datetime({ offset: true }), z.string().regex(EPOCH)])
+    .optional()
+    .openapi({
+      description:
+        "When the phone received the notification: ISO 8601 with offset, or epoch seconds or " +
+        "milliseconds. Defaults to server receive time.",
       example: "2026-10-05T22:32:10-03:00",
     }),
-  })
-  .openapi("IngestRequest");
+});
+
+const IngestBody = IngestFields.openapi("IngestRequest");
+
+function receivedAt(value: string): Date {
+  if (!EPOCH.test(value)) return new Date(value);
+  return new Date(Number(value) * (value.length === 10 ? 1000 : 1));
+}
 
 const IngestAccepted = z
   .object({ event_id: z.number().int().openapi({ example: 1 }) })
@@ -97,10 +107,13 @@ const ingestRoute = createRoute({
   summary: "Ingest a notification",
   description:
     "Stores the notification as an event and returns immediately. Classification, purchase " +
-    "recording and the Telegram message happen asynchronously.",
+    "recording and the Telegram message happen asynchronously. The fields come either as query " +
+    "parameters (MacroDroid, which URL-encodes them but not a body; any body is then ignored) " +
+    "or as a JSON body.",
   security: [{ webhookSecret: [] }],
   request: {
-    body: { required: true, content: { "application/json": { schema: IngestBody } } },
+    query: IngestFields.partial(),
+    body: { content: { "application/json": { schema: IngestBody } } },
   },
   responses: {
     202: {
@@ -108,7 +121,7 @@ const ingestRoute = createRoute({
       content: { "application/json": { schema: IngestAccepted } },
     },
     400: {
-      description: "Body is not valid JSON or fails validation",
+      description: "Fields are missing or invalid, or the body is not valid JSON",
       content: { "application/json": { schema: ErrorBody } },
     },
     401: unauthorized,
@@ -155,20 +168,29 @@ export function createApp<E extends Env>(resolve: (c: Context<E>) => Runtime) {
       await next();
     };
 
-  app.openapi(
-    { ...ingestRoute, middleware: [requireSecret("x-webhook-secret", (c) => c.WEBHOOK_SECRET)] },
-    async (c) => {
+  // Validated by hand: MacroDroid sends a form content type with its query parameters, which the
+  // route validator would reject. The route is registered for the OpenAPI document only.
+  app.openAPIRegistry.registerPath(ingestRoute);
+  app.post(
+    ingestRoute.path,
+    requireSecret("x-webhook-secret", (c) => c.WEBHOOK_SECRET),
+    async (c: Context<E>) => {
       const runtime = resolve(c);
       const { config, store } = runtime;
-      const body = c.req.valid("json");
+      const query = c.req.query();
+      const input =
+        Object.keys(query).length > 0 ? query : await c.req.json().catch(() => undefined);
+      const parsed = IngestFields.safeParse(input);
+      if (!parsed.success) return c.json({ error: z.prettifyError(parsed.error) }, 400);
+      const fields = parsed.data;
 
       const user = await ensureUser(runtime);
       const event = await store.insertEvent({
         userId: user.id,
-        app: body.app,
-        title: body.title,
-        text: body.text,
-        receivedAt: body.received_at ? new Date(body.received_at) : runtime.clock.now(),
+        app: fields.app,
+        title: fields.title,
+        text: fields.text,
+        receivedAt: fields.received_at ? receivedAt(fields.received_at) : runtime.clock.now(),
       });
 
       const deps = { ...runtime, packRules: loadRules(config.RULE_PACKS) };

@@ -50,7 +50,7 @@
           "app": {
             "type": "string",
             "default": "",
-            "description": "Originating app name (MacroDroid `[notification_app_name]`). Informational.",
+            "description": "Originating app name. Informational.",
             "example": "Galicia"
           },
           "title": {
@@ -64,9 +64,17 @@
             "example": "A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 22:32."
           },
           "received_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "When the phone received the notification. Defaults to server receive time.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string",
+                "pattern": "^\\d{10}(\\d{3})?$"
+              }
+            ],
+            "description": "When the phone received the notification: ISO 8601 with offset, or epoch seconds or milliseconds. Defaults to server receive time.",
             "example": "2026-10-05T22:32:10-03:00"
           }
         },
@@ -172,14 +180,69 @@
           "Ingest"
         ],
         "summary": "Ingest a notification",
-        "description": "Stores the notification as an event and returns immediately. Classification, purchase recording and the Telegram message happen asynchronously.",
+        "description": "Stores the notification as an event and returns immediately. Classification, purchase recording and the Telegram message happen asynchronously. The fields come either as query parameters (MacroDroid, which URL-encodes them but not a body; any body is then ignored) or as a JSON body.",
         "security": [
           {
             "webhookSecret": []
           }
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "default": "",
+              "description": "Originating app name. Informational.",
+              "example": "Galicia"
+            },
+            "required": false,
+            "description": "Originating app name. Informational.",
+            "name": "app",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Notification title.",
+              "example": "Pagaste $15.000,01"
+            },
+            "required": false,
+            "description": "Notification title.",
+            "name": "title",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Notification text.",
+              "example": "A AXION VILLA ALLENDE con tu Visa Crédito 3551 a las 22:32."
+            },
+            "required": false,
+            "description": "Notification text.",
+            "name": "text",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\d{10}(\\d{3})?$"
+                }
+              ],
+              "description": "When the phone received the notification: ISO 8601 with offset, or epoch seconds or milliseconds. Defaults to server receive time.",
+              "example": "2026-10-05T22:32:10-03:00"
+            },
+            "required": false,
+            "description": "When the phone received the notification: ISO 8601 with offset, or epoch seconds or milliseconds. Defaults to server receive time.",
+            "name": "received_at",
+            "in": "query"
+          }
+        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -200,7 +263,7 @@
             }
           },
           "400": {
-            "description": "Body is not valid JSON or fails validation",
+            "description": "Fields are missing or invalid, or the body is not valid JSON",
             "content": {
               "application/json": {
                 "schema": {

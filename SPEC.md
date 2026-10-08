@@ -57,7 +57,8 @@ Example: ordering food gives `Category: Delivery`, `Group: Food`.
 
 Headers: `X-Webhook-Secret: <WEBHOOK_SECRET>` (constant-time compare, `401` on mismatch).
 
-Body (JSON):
+Fields as query parameters (MacroDroid, §13.4) or a JSON body. With any query parameter present the body is ignored.
+
 ```json
 {
   "app": "Galicia",
@@ -67,8 +68,8 @@ Body (JSON):
 }
 ```
 
-- `app`: originating app name (MacroDroid `[notification_app_name]`). Informational only. Rules may use it, but title and text are what drive classification.
-- `received_at`: optional. Defaults to server receive time.
+- `app`: originating app name. Informational only. Rules may use it, but title and text are what drive classification.
+- `received_at`: optional. ISO 8601 with offset, or epoch seconds (10 digits) or milliseconds (13 digits). Defaults to server receive time.
 - The endpoint stores the event and returns `202` right away. Processing runs async (`ctx.waitUntil` on Cloudflare, in-process queue on Node).
 
 ### 4.2 Text normalization (before matching)
@@ -367,7 +368,7 @@ Where each diagram box lives in the code. *Planned* boxes have no code yet.
 
 | Diagram | Code |
 |---|---|
-| Notification, MacroDroid | *Planned*: `macrodroid/`. Payload in §13.4 |
+| Notification, MacroDroid | [`macrodroid/`](macrodroid/). Payload in §13.4 |
 | Denarii runtime | [`apps/cloudflare/src/index.ts`](apps/cloudflare/src/index.ts), [`apps/cloudflare/wrangler.jsonc`](apps/cloudflare/wrangler.jsonc). Node: *planned* (`apps/node/`) |
 | Hono API | [`packages/api/src/app.ts`](packages/api/src/app.ts) (`/api/ingest`, `/api/telegram`). tRPC: *planned* |
 | React SPA | *Planned*: `apps/web/` |
@@ -450,7 +451,8 @@ docker/        Dockerfile, docker-compose.yml
 
 The repo ships an exported macro:
 - Trigger: notification received from the configured banking apps.
-- Action: HTTP POST to `<PUBLIC_URL>/api/ingest` with the secret header and JSON body `{app: [notification_app_name], title: [notification_title], text: [notification], received_at: [system_time]}`.
+- Action: HTTP POST to `<PUBLIC_URL>/api/ingest` with the secret header and query parameters `app`, `title`, `text`, `received_at` (app name, notification title, notification text, system time in milliseconds).
+- Query parameters, not a JSON body: MacroDroid URL-encodes query parameters but inserts magic text into a body unescaped, so quotes and newlines in a notification break JSON.
 
 ## 14. Phases
 

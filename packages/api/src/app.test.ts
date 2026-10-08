@@ -2,7 +2,7 @@ import { compileRules, parsePack, processEvent } from "@denarii/core";
 import { schema } from "@denarii/db";
 import { PACK_SOURCES } from "@denarii/rules";
 import { describe, expect, it } from "vitest";
-import { GALICIA_PURCHASE, setup } from "./test-harness";
+import { GALICIA_PURCHASE, setup, WEBHOOK_SECRET } from "./test-harness";
 
 describe("POST /api/ingest", () => {
   it("rejects a missing or wrong secret without storing anything", async () => {
@@ -20,6 +20,75 @@ describe("POST /api/ingest", () => {
   it("rejects a malformed body", async () => {
     const { ingest } = setup();
     expect((await ingest({ title: "x" })).status).toBe(400);
+  });
+
+  describe("MacroDroid query parameters (SPEC §13.4)", () => {
+    const macrodroid = (
+      app: ReturnType<typeof setup>["app"],
+      params: Record<string, string>,
+      secret = WEBHOOK_SECRET,
+    ) =>
+      app.request(`/api/ingest?${new URLSearchParams(params)}`, {
+        method: "POST",
+        // MacroDroid sends a form content type, and an unencoded body if one is configured.
+        headers: {
+          "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+          "x-webhook-secret": secret,
+        },
+        body: 'title=[Pagaste "x"]&text=[a\nb]',
+      });
+
+    it("reads the notification from the query string, quotes and newlines intact", async () => {
+      const { app, db, settled } = setup();
+      const response = await macrodroid(app, {
+        ...GALICIA_PURCHASE,
+        title: 'Test "quoted"',
+        text: 'line one\n" line two',
+        received_at: "1791482638365",
+      });
+      expect(response.status).toBe(202);
+      await settled();
+      expect(db.select().from(schema.events).all()).toMatchObject([
+        {
+          app: "Galicia",
+          title: 'Test "quoted"',
+          text: 'line one\n" line two',
+          receivedAt: "2026-10-08T18:03:58.365Z",
+        },
+      ]);
+    });
+
+    it("records a purchase from query parameters", async () => {
+      const { app, db, settled } = setup();
+      await macrodroid(app, GALICIA_PURCHASE);
+      await settled();
+      expect(db.select().from(schema.purchases).all()).toHaveLength(1);
+    });
+
+    it("accepts received_at in epoch seconds", async () => {
+      const { app, db } = setup();
+      await macrodroid(app, { ...GALICIA_PURCHASE, received_at: "1791482037" });
+      expect(db.select().from(schema.events).all()[0]?.receivedAt).toBe("2026-10-08T17:53:57.000Z");
+    });
+
+    it("rejects missing fields and a wrong secret", async () => {
+      const { app, db } = setup();
+      expect((await macrodroid(app, { app: "Galicia", title: "x" })).status).toBe(400);
+      expect((await macrodroid(app, GALICIA_PURCHASE, "")).status).toBe(401);
+      expect(db.select().from(schema.events).all()).toHaveLength(0);
+    });
+  });
+
+  it("accepts received_at in epoch milliseconds in a JSON body", async () => {
+    const { db, ingest } = setup();
+    await ingest({ ...GALICIA_PURCHASE, received_at: "1791482638365" });
+    expect(db.select().from(schema.events).all()[0]?.receivedAt).toBe("2026-10-08T18:03:58.365Z");
+  });
+
+  it("rejects a received_at that is neither ISO nor epoch", async () => {
+    const { ingest } = setup();
+    expect((await ingest({ ...GALICIA_PURCHASE, received_at: "yesterday" })).status).toBe(400);
+    expect((await ingest({ ...GALICIA_PURCHASE, received_at: "12345" })).status).toBe(400);
   });
 
   it("stores the event, records the purchase and announces it in Telegram", async () => {
