@@ -16,6 +16,7 @@ import { ignoreSimilarRule, similarMatch } from "../rules/ignore-similar";
 import { type Action, decodeAction } from "./callback-data";
 import { parseManualPurchase } from "./manual-purchase";
 import {
+  amountLabel,
   categoryLabel,
   confirmationKeyboard,
   confirmationText,
@@ -27,6 +28,9 @@ import {
   pickerKeyboard,
   pickerText,
   TOP_CATEGORIES,
+  transferKeyboard,
+  transferNotExpenseText,
+  transferText,
   unmatchedKeyboard,
   unmatchedText,
 } from "./views";
@@ -84,6 +88,20 @@ export async function announcePurchase(
     );
   }
   await store.setPurchaseTelegramMessage(purchase.id, sent.messageId);
+}
+
+/** SPEC §7.4: asks whether a transfer is an expense. */
+export async function announceTransfer(
+  deps: BotDeps,
+  user: User,
+  purchase: StoredPurchase,
+): Promise<void> {
+  const { messageId } = await deps.messenger.send(
+    user.telegramChatId,
+    transferText(user, purchase),
+    transferKeyboard(user.locale, purchase.id),
+  );
+  await deps.store.setPurchaseTelegramMessage(purchase.id, messageId);
 }
 
 /** SPEC §7.3: asks whether an event no rule matched is a purchase. */
@@ -163,6 +181,24 @@ async function handleCallback(
       );
       return answer();
     }
+    case "transferExpense":
+    case "transferNotExpense":
+      if (purchase.kind !== "transfer" || purchase.status !== "pending") return answer();
+      if (action.type === "transferExpense") {
+        await setState(deps, user, {
+          step: "awaiting_transfer_description",
+          purchaseId: purchase.id,
+        });
+        await messenger.send(
+          chatId,
+          t(user.locale, "askTransferDescription", { amount: amountLabel(user, purchase) }),
+        );
+        return answer();
+      }
+      await store.clearChatState(chatId);
+      await store.excludePurchase(purchase.id);
+      await messenger.edit(chatId, input.messageId, transferNotExpenseText(user, purchase));
+      return answer();
     case "skip":
       await store.clearChatState(chatId);
       await messenger.edit(chatId, input.messageId, pickerText(user, purchase));
@@ -361,6 +397,13 @@ async function handleText(deps: BotDeps, user: User, text: string): Promise<void
     return;
   }
 
+  if (state.step === "awaiting_transfer_description") {
+    await store.clearChatState(chatId);
+    if (purchase.kind !== "transfer" || purchase.status !== "pending") return;
+    await describeTransfer(deps, user, purchase, name);
+    return;
+  }
+
   if (state.step === "awaiting_category_name") {
     const existing = await store.findCategoryByName(user.id, name);
     if (existing) {
@@ -385,6 +428,38 @@ async function handleText(deps: BotDeps, user: User, text: string): Promise<void
   const category = await ensureCategory(deps, user, state.categoryName, group.id);
   await store.clearChatState(chatId);
   await applyCategory(deps, user, purchase, category, purchase.telegramMessageId);
+}
+
+/**
+ * The transfer description becomes its merchant, then the transfer message turns into the category
+ * picker. Transfers never create merchant rules (`canHaveMerchantRule`).
+ */
+async function describeTransfer(
+  deps: BotDeps,
+  user: User,
+  transfer: StoredPurchase,
+  description: string,
+): Promise<void> {
+  const { store, messenger } = deps;
+  const described: StoredPurchase = {
+    ...transfer,
+    merchantRaw: description,
+    merchantNormalized: normalizeMerchant(description),
+  };
+  await store.updatePurchaseExtraction(transfer.id, {
+    kind: described.kind,
+    merchantRaw: described.merchantRaw,
+    merchantNormalized: described.merchantNormalized,
+    paymentMethodId: described.paymentMethodId,
+  });
+  const text = pickerText(user, described);
+  const keyboard = pickerKeyboard(user.locale, described.id, await topCategories(deps, user));
+  if (described.telegramMessageId !== null) {
+    await messenger.edit(user.telegramChatId, described.telegramMessageId, text, keyboard);
+  } else {
+    const { messageId } = await messenger.send(user.telegramChatId, text, keyboard);
+    await store.setPurchaseTelegramMessage(described.id, messageId);
+  }
 }
 
 /**

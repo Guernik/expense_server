@@ -1,7 +1,6 @@
-import { announcePurchase, announceUnmatched, type BotDeps } from "./bot/flows";
+import { announcePurchase, announceTransfer, announceUnmatched, type BotDeps } from "./bot/flows";
 import { dedupeWindow } from "./dedupe";
-import { INTL_LOCALE, t } from "./i18n";
-import { formatMoney, toMinor } from "./money";
+import { toMinor } from "./money";
 import { resolveOccurredAt } from "./occurred-at";
 import type { StoredEvent, User } from "./ports";
 import {
@@ -23,7 +22,7 @@ export async function processEvent(
   user: User,
   event: StoredEvent,
 ): Promise<void> {
-  const { store, messenger, packRules } = deps;
+  const { store, packRules } = deps;
   const userRules = compileRules([], await store.listUserRules(user.id));
   const rules = [...userRules, ...packRules];
   const result = classify(rules, event);
@@ -84,24 +83,8 @@ export async function processEvent(
     extractedBy: "regex",
   });
 
-  if (result.kind === "purchase") {
-    await announcePurchase(deps, user, purchase);
-    return;
-  }
-
-  const intlLocale = INTL_LOCALE[user.locale];
-  const time =
-    fields.time ??
-    new Intl.DateTimeFormat(intlLocale, {
-      timeZone: user.timezone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).format(event.receivedAt);
-  const amount = formatMoney(purchase.amountMinor, purchase.currency, intlLocale);
-  const text = t(user.locale, "transferNotice", { amount, time });
-  const { messageId } = await messenger.send(user.telegramChatId, text);
-  await store.setPurchaseTelegramMessage(purchase.id, messageId);
+  if (result.kind === "purchase") await announcePurchase(deps, user, purchase);
+  else await announceTransfer(deps, user, purchase);
 }
 
 /** Number of optional fields the extraction found. The richer extraction wins a dedupe merge. */
