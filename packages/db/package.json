@@ -9,6 +9,7 @@
   "scripts": {
     "lint": "biome check .",
     "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
     "generate": "drizzle-kit generate"
   },
   "dependencies": {
