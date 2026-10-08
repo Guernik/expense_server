@@ -5,6 +5,7 @@ const MAX_ID = Number.MAX_SAFE_INTEGER;
 
 const ACTIONS: Action[] = [
   { type: "pick", purchaseId: MAX_ID, categoryId: MAX_ID },
+  { type: "suggestion", purchaseId: MAX_ID },
   { type: "more", purchaseId: MAX_ID, page: 999 },
   { type: "picker", purchaseId: MAX_ID },
   { type: "newCategory", purchaseId: MAX_ID },

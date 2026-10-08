@@ -116,6 +116,13 @@ export const purchases = sqliteTable(
     categoryId: integer("category_id").references(() => categories.id),
     categorizedBy: text("categorized_by", { enum: ["rule", "user", "import"] }),
     comment: text("comment"),
+    /**
+     * LLM suggestion (SPEC §7.1): an existing category, or a new category name plus its group name.
+     * Never applied without the user.
+     */
+    suggestedCategoryId: integer("suggested_category_id").references(() => categories.id),
+    suggestedCategoryName: text("suggested_category_name"),
+    suggestedGroupName: text("suggested_group_name"),
     source: text("source", { enum: ["live", "import"] })
       .notNull()
       .default("live"),

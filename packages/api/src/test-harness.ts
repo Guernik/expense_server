@@ -1,4 +1,4 @@
-import { type Keyboard, MAX_CALLBACK_BYTES, type Messenger } from "@denarii/core";
+import { type Keyboard, type LlmProvider, MAX_CALLBACK_BYTES, type Messenger } from "@denarii/core";
 import { createStore } from "@denarii/db";
 import { createTestDatabase } from "@denarii/db/testing";
 import { createApp, type Runtime } from "./app";
@@ -51,7 +51,7 @@ function createFakeMessenger() {
   return { messenger, messages, toasts, acknowledged };
 }
 
-export function setup(locale: "en" | "es" = "es") {
+export function setup(locale: "en" | "es" = "es", options: { llm?: LlmProvider } = {}) {
   const db = createTestDatabase();
   const { messenger, messages, toasts, acknowledged } = createFakeMessenger();
   const clock = { current: new Date("2026-10-07T01:32:10Z") };
@@ -68,6 +68,7 @@ export function setup(locale: "en" | "es" = "es") {
     store: createStore(db),
     messenger,
     clock: { now: () => clock.current },
+    llm: options.llm,
     defer: (task) => tasks.push(task),
   };
   const app = createApp(() => runtime);

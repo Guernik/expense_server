@@ -2,6 +2,7 @@ import {
   type BotInput,
   type Clock,
   handleBotInput,
+  type LlmProvider,
   type Messenger,
   processEvent,
   type Store,
@@ -17,6 +18,8 @@ export interface Runtime {
   store: Store;
   messenger: Messenger;
   clock: Clock;
+  /** Undefined with `LLM_PROVIDER=none`. */
+  llm?: LlmProvider | undefined;
   /** Runs work after the response is sent (waitUntil on Workers). */
   defer(task: Promise<unknown>): void;
 }

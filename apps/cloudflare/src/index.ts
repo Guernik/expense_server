@@ -1,5 +1,6 @@
 import { createApp, createTelegramMessenger, parseConfig } from "@denarii/api";
 import { createStore, schema } from "@denarii/db";
+import { createLlmProvider } from "@denarii/llm";
 import { drizzle } from "drizzle-orm/d1";
 
 const app = createApp<{ Bindings: Env }>((c) => {
@@ -9,6 +10,7 @@ const app = createApp<{ Bindings: Env }>((c) => {
     store: createStore(drizzle(c.env.DB, { schema })),
     messenger: createTelegramMessenger(config.TELEGRAM_BOT_TOKEN),
     clock: { now: () => new Date() },
+    llm: createLlmProvider(config),
     defer: (task) => c.executionCtx.waitUntil(task),
   };
 });
