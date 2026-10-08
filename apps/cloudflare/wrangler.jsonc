@@ -21,7 +21,7 @@
   // Secrets (wrangler secret put / .dev.vars): WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN,
   // TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET
   "vars": {
-    "RULE_PACKS": "ar.galicia",
+    "RULE_PACKS": "ar.galicia,ar.mercadopago",
     "TIMEZONE": "America/Argentina/Cordoba",
     "LOCALE": "es"
   }

@@ -12,5 +12,19 @@
   },
   "dependencies": {
     "@denarii/core": "*"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.1"
+  },
+  "nx": {
+    "targets": {
+      "test": {
+        "inputs": [
+          "default",
+          "^default",
+          "{workspaceRoot}/fixtures/**/*"
+        ]
+      }
+    }
   }
 }

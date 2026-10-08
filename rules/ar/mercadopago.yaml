@@ -1,0 +1,75 @@
+# Mercado Pago (Argentina) notifications.
+pack: ar.mercadopago
+rules:
+  # Ignore rules run before purchase rules (priority 200 > 100).
+  - id: ar.mercadopago.bill-reminder
+    kind: ignore
+    priority: 200
+    match:
+      title: '(vence pronto|^Ten[eé]s una factura que vence)'
+    tests:
+      - title: 'Tu factura de luz vence pronto'
+        text: 'Pagala desde Mercado Pago antes del vencimiento.'
+      - title: 'Tenés una factura que vence mañana'
+        text: 'Pagá $ 18.450 antes de que venza.'
+
+  - id: ar.mercadopago.income
+    kind: ignore
+    priority: 200
+    match:
+      title: '^(¡?Recibiste|Tu dinero ya est[aá] disponible)'
+    tests:
+      - title: 'Recibiste $ 25.000'
+        text: 'Ya tenés el dinero disponible en tu cuenta.'
+      - title: '¡Recibiste plata!'
+        text: 'Te enviaron $ 5.000.'
+      - title: 'Tu dinero ya está disponible'
+        text: 'Ya podés usar $ 12.300 de tu venta.'
+
+  - id: ar.mercadopago.failed-payment
+    kind: ignore
+    priority: 200
+    match:
+      title: '^(Hubo un problema con tu pago|No tienes dinero suficiente)'
+    tests:
+      - title: 'Hubo un problema con tu pago'
+        text: 'No pudimos procesar tu pago de $ 3.500.'
+      - title: 'No tienes dinero suficiente'
+        text: 'Ingresá dinero para pagar $ 7.990.'
+
+  - id: ar.mercadopago.account-purchase
+    kind: purchase
+    priority: 100
+    match:
+      title: '^Pagaste a (?<merchant>.+)$'
+      text: '^Debitamos (?<currency>\$|USD) ?(?<amount>[\d.,]+) de tu cuenta$'
+    transform:
+      amount: { number_format: es-AR }
+      currency: { map: { "$": ARS, USD: USD } }
+      payment_method: 'Mercado Pago cuenta'
+      strip_prefixes: ['MERPAGO=', 'DLO*']
+    tests:
+      - title: 'Pagaste a SHOWCASE CORDOBA'
+        text: 'Debitamos $ 10.200 de tu cuenta.'
+        expect: { amount: "10200", currency: ARS, merchant: SHOWCASE CORDOBA, payment_method: Mercado Pago cuenta }
+      - title: 'Pagaste a DLO*PedidosYa'
+        text: 'Debitamos $ 19990 de tu cuenta'
+        expect: { amount: "19990", currency: ARS, merchant: DLO*PedidosYa, payment_method: Mercado Pago cuenta }
+
+  - id: ar.mercadopago.payment-approved
+    kind: purchase
+    priority: 100
+    match:
+      title: '^Tu pago fue aprobado'
+      text: '^Hiciste un pago por (?<currency>\$|USD) ?(?<amount>[\d.,]+)$'
+    transform:
+      amount: { number_format: es-AR }
+      currency: { map: { "$": ARS, USD: USD } }
+      merchant: Unknown
+    tests:
+      - title: 'Tu pago fue aprobado'
+        text: 'Hiciste un pago por $ 19990.'
+        expect: { amount: "19990", currency: ARS, merchant: Unknown }
+      - title: 'Tu pago fue aprobado ✅'
+        text: 'Hiciste un pago por $ 4.250,50'
+        expect: { amount: "4250.5", currency: ARS, merchant: Unknown }

@@ -1,5 +1,6 @@
 import { INTL_LOCALE, t } from "./i18n";
 import { formatMoney, toMinor } from "./money";
+import { resolveOccurredAt } from "./occurred-at";
 import type { Messenger, Store, StoredEvent, User } from "./ports";
 import { type CompiledRule, classify } from "./rules/engine";
 
@@ -35,7 +36,7 @@ export async function processEvent(
   const purchase = await store.insertPurchase({
     userId: user.id,
     kind: result.kind,
-    occurredAt: event.receivedAt,
+    occurredAt: resolveOccurredAt(event.receivedAt, fields.time, user.timezone),
     amountMinor: toMinor(fields.amount, fields.currency),
     currency: fields.currency,
     merchantRaw: fields.merchant,
