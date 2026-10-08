@@ -17,3 +17,4 @@ Format: Context, Decision, Consequences, Alternatives. Status is one of `Accepte
 | [0011](0011-dedupe-window.md) | Dedupe by amount + currency within 30 seconds |
 | [0012](0012-telegram-primary-interaction.md) | Telegram is the primary interaction surface |
 | [0013](0013-local-dev-bot.md) | Local development uses a separate dev bot with polling |
+| [0014](0014-dedupe-window-10s.md) | Dedupe window narrowed to 10 seconds |

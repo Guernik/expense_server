@@ -121,10 +121,10 @@ describe("POST /api/ingest", () => {
 describe("dedupe", () => {
   const at = (time: string) => ({ ...GALICIA_PURCHASE, received_at: `2026-10-07T01:${time}Z` });
 
-  it("merges the same notification posted twice within 30 s", async () => {
+  it("merges the same notification posted twice within 10 s", async () => {
     const { db, messages, ingest, settled } = setup();
     await ingest(at("32:10"));
-    await ingest(at("32:40"));
+    await ingest(at("32:20"));
     await settled();
 
     const purchases = db.select().from(schema.purchases).all();
@@ -140,15 +140,15 @@ describe("dedupe", () => {
   it("merges an event received before the existing purchase's", async () => {
     const { db, ingest, settled } = setup();
     await ingest(at("32:10"));
-    await ingest(at("31:40"));
+    await ingest(at("32:00"));
     await settled();
     expect(db.select().from(schema.purchases).all()).toHaveLength(1);
   });
 
-  it("keeps purchases 31 s apart separate", async () => {
+  it("keeps purchases 11 s apart separate", async () => {
     const { db, messages, ingest, settled } = setup();
     await ingest(at("32:10"));
-    await ingest(at("32:41"));
+    await ingest(at("32:21"));
     await settled();
     expect(db.select().from(schema.purchases).all()).toHaveLength(2);
     expect(messages).toHaveLength(2);
