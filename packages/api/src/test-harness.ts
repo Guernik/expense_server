@@ -3,6 +3,7 @@ import { createStore } from "@denarii/db";
 import { createTestDatabase } from "@denarii/db/testing";
 import { createApp, type Runtime } from "./app";
 import { parseConfig } from "./config";
+import { runScheduled } from "./scheduled";
 
 export const WEBHOOK_SECRET = "test-webhook-secret-0123";
 export const TELEGRAM_SECRET = "test-telegram-secret-0123";
@@ -51,7 +52,10 @@ function createFakeMessenger() {
   return { messenger, messages, toasts, acknowledged };
 }
 
-export function setup(locale: "en" | "es" = "es", options: { llm?: LlmProvider } = {}) {
+export function setup(
+  locale: "en" | "es" = "es",
+  options: { llm?: LlmProvider; env?: Record<string, string> } = {},
+) {
   const db = createTestDatabase();
   const { messenger, messages, toasts, acknowledged } = createFakeMessenger();
   const clock = { current: new Date("2026-10-07T01:32:10Z") };
@@ -64,6 +68,7 @@ export function setup(locale: "en" | "es" = "es", options: { llm?: LlmProvider }
       TELEGRAM_WEBHOOK_SECRET: TELEGRAM_SECRET,
       RULE_PACKS: "ar.galicia,ar.mercadopago",
       LOCALE: locale,
+      ...options.env,
     }),
     store: createStore(db),
     messenger,
@@ -115,6 +120,8 @@ export function setup(locale: "en" | "es" = "es", options: { llm?: LlmProvider }
         ...(replyTo && { reply_to_message: { message_id: replyTo.messageId } }),
       },
     });
+  /** A Cron Trigger tick at `at`, as the Worker's `scheduled` handler runs it. */
+  const tick = (at: Date) => runScheduled(runtime, at);
   const message = (messageId: number | undefined) =>
     messages.find((m) => m.messageId === messageId);
   const buttons = (m: FakeMessage | undefined) =>
@@ -133,6 +140,7 @@ export function setup(locale: "en" | "es" = "es", options: { llm?: LlmProvider }
     settled,
     tap,
     say,
+    tick,
     message,
     buttons,
   };
