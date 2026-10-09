@@ -347,8 +347,8 @@ Optional. `LLM_PROVIDER = anthropic | openai | workers-ai | none` (default `none
 | Provider | Default model | Config |
 |---|---|---|
 | `anthropic` | `claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
-| `openai` | configurable | `OPENAI_API_KEY`, `OPENAI_BASE_URL` (OpenAI-compatible endpoints) |
-| `workers-ai` | configurable | Cloudflare `AI` binding, or `CF_ACCOUNT_ID` + `CF_API_TOKEN` on Node |
+| `openai` | none, `LLM_MODEL` required | `OPENAI_API_KEY`, `OPENAI_BASE_URL` (OpenAI-compatible endpoints, default `https://api.openai.com/v1`) |
+| `workers-ai` | none, `LLM_MODEL` required | Cloudflare `AI` binding, or `CF_ACCOUNT_ID` + `CF_API_TOKEN` on Node |
 
 `LLM_MODEL` overrides the default. All providers implement one interface with three structured-output operations:
 - `suggestCategory`
@@ -380,7 +380,7 @@ Where each diagram box lives in the code. *Planned* boxes have no code yet.
 | Telegram flows | [`packages/core/src/bot/`](packages/core/src/bot/) ([`flows.ts`](packages/core/src/bot/flows.ts), [`views.ts`](packages/core/src/bot/views.ts), [`callback-data.ts`](packages/core/src/bot/callback-data.ts), [`manual-purchase.ts`](packages/core/src/bot/manual-purchase.ts), [`llm-extraction.ts`](packages/core/src/bot/llm-extraction.ts)), strings in [`packages/core/src/i18n.ts`](packages/core/src/i18n.ts) |
 | Telegram (Bot API) | `Messenger` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), implemented by [`packages/api/src/telegram.ts`](packages/api/src/telegram.ts) |
 | Scheduler | `Scheduler` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), digest in [`packages/core/src/digest.ts`](packages/core/src/digest.ts), Cron Trigger tick in [`packages/api/src/scheduler.ts`](packages/api/src/scheduler.ts) and [`packages/api/src/scheduled.ts`](packages/api/src/scheduled.ts) |
-| LLM provider | *Planned*: `packages/llm/` |
+| LLM provider | `LlmProvider` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), implemented in [`packages/llm/src/`](packages/llm/src/) ([`anthropic.ts`](packages/llm/src/anthropic.ts), [`openai.ts`](packages/llm/src/openai.ts), [`workers-ai.ts`](packages/llm/src/workers-ai.ts)), shared prompts in [`prompt.ts`](packages/llm/src/prompt.ts) |
 | Store, SQLite | `Store` port in [`packages/core/src/ports.ts`](packages/core/src/ports.ts), implemented by [`packages/db/src/store.ts`](packages/db/src/store.ts). Schema [`packages/db/src/schema.ts`](packages/db/src/schema.ts), migrations [`packages/db/migrations/`](packages/db/migrations/) |
 
 Nx + npm workspaces.

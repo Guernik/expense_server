@@ -21,7 +21,41 @@ describe("LLM config", () => {
     ).toMatchObject({ LLM_PROVIDER: "anthropic", LLM_MODEL: "m" });
   });
 
-  it("rejects providers that aren't implemented yet", () => {
-    expect(() => parseConfig({ ...BASE, LLM_PROVIDER: "openai" })).toThrow(/LLM_PROVIDER/);
+  it("requires OPENAI_API_KEY and LLM_MODEL for openai", () => {
+    expect(() => parseConfig({ ...BASE, LLM_PROVIDER: "openai", LLM_MODEL: "m" })).toThrow(
+      /OPENAI_API_KEY/,
+    );
+    expect(() => parseConfig({ ...BASE, LLM_PROVIDER: "openai", OPENAI_API_KEY: "k" })).toThrow(
+      /LLM_MODEL/,
+    );
+    expect(
+      parseConfig({
+        ...BASE,
+        LLM_PROVIDER: "openai",
+        OPENAI_API_KEY: "k",
+        LLM_MODEL: "m",
+        OPENAI_BASE_URL: "http://localhost:11434/v1",
+      }),
+    ).toMatchObject({ LLM_PROVIDER: "openai", OPENAI_BASE_URL: "http://localhost:11434/v1" });
+    expect(() =>
+      parseConfig({
+        ...BASE,
+        LLM_PROVIDER: "openai",
+        OPENAI_API_KEY: "k",
+        LLM_MODEL: "m",
+        OPENAI_BASE_URL: "not a url",
+      }),
+    ).toThrow(/OPENAI_BASE_URL/);
+  });
+
+  it("requires LLM_MODEL for workers-ai", () => {
+    expect(() => parseConfig({ ...BASE, LLM_PROVIDER: "workers-ai" })).toThrow(/LLM_MODEL/);
+    expect(
+      parseConfig({ ...BASE, LLM_PROVIDER: "workers-ai", LLM_MODEL: "@cf/m", CF_ACCOUNT_ID: "a" }),
+    ).toMatchObject({ LLM_PROVIDER: "workers-ai", CF_ACCOUNT_ID: "a" });
+  });
+
+  it("rejects unknown providers", () => {
+    expect(() => parseConfig({ ...BASE, LLM_PROVIDER: "gemini" })).toThrow(/LLM_PROVIDER/);
   });
 });

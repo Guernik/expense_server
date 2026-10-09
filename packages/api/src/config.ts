@@ -46,10 +46,31 @@ export const configSchema = z
     LLM_PROVIDER: z.enum(LLM_PROVIDERS).default("none"),
     LLM_MODEL: z.string().min(1).optional(),
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: z.string().min(1).optional(),
+    /** Any OpenAI-compatible endpoint (SPEC §11). */
+    OPENAI_BASE_URL: z.url().optional(),
+    /** Workers AI over REST, when the Worker has no `AI` binding (Node). */
+    CF_ACCOUNT_ID: z.string().min(1).optional(),
+    CF_API_TOKEN: z.string().min(1).optional(),
   })
-  .refine((c) => c.LLM_PROVIDER !== "anthropic" || c.ANTHROPIC_API_KEY, {
-    message: "required when LLM_PROVIDER=anthropic",
-    path: ["ANTHROPIC_API_KEY"],
+  .superRefine((c, ctx) => {
+    const require = (key: keyof typeof c) => {
+      if (!c[key]) {
+        ctx.addIssue({
+          code: "custom",
+          message: `required when LLM_PROVIDER=${c.LLM_PROVIDER}`,
+          path: [key],
+        });
+      }
+    };
+    if (c.LLM_PROVIDER === "anthropic") require("ANTHROPIC_API_KEY");
+    if (c.LLM_PROVIDER === "openai") {
+      require("OPENAI_API_KEY");
+      require("LLM_MODEL");
+    }
+    // The `AI` binding isn't an environment string, so CF_ACCOUNT_ID and CF_API_TOKEN are checked
+    // when the provider is created.
+    if (c.LLM_PROVIDER === "workers-ai") require("LLM_MODEL");
   });
 
 export type Config = z.output<typeof configSchema>;
