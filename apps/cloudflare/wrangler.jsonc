@@ -22,9 +22,12 @@
   // Rule packs are bundled as raw text.
   "rules": [{ "type": "Text", "globs": ["**/*.yaml"], "fallthrough": true }],
   // Secrets (wrangler secret put + .prod.vars; the dev bot's in .dev.vars): WEBHOOK_SECRET,
-  // TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET, and ANTHROPIC_API_KEY with
-  // LLM_PROVIDER=anthropic.
-  // Optional vars: LLM_PROVIDER (none | anthropic, default none), LLM_MODEL.
+  // TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET, and the LLM provider's key:
+  // ANTHROPIC_API_KEY (anthropic) or OPENAI_API_KEY (openai).
+  // Optional vars: LLM_PROVIDER (none | anthropic | openai | workers-ai, default none), LLM_MODEL
+  // (required for openai and workers-ai), OPENAI_BASE_URL.
+  // Workers AI uses the AI binding: add "ai": { "binding": "AI" } (wrangler dev then needs a
+  // Cloudflare login, since Workers AI always runs remotely).
   "vars": {
     "RULE_PACKS": "ar.galicia,ar.mercadopago",
     "TIMEZONE": "America/Argentina/Cordoba",

@@ -6,7 +6,7 @@ import {
   runScheduled,
 } from "@denarii/api";
 import { createStore, schema } from "@denarii/db";
-import { createLlmProvider } from "@denarii/llm";
+import { createLlmProvider, type WorkersAiBinding } from "@denarii/llm";
 import { drizzle } from "drizzle-orm/d1";
 
 function runtime(env: Env, ctx: Pick<ExecutionContext, "waitUntil">): Runtime {
@@ -16,7 +16,8 @@ function runtime(env: Env, ctx: Pick<ExecutionContext, "waitUntil">): Runtime {
     store: createStore(drizzle(env.DB, { schema })),
     messenger: createTelegramMessenger(config.TELEGRAM_BOT_TOKEN),
     clock: { now: () => new Date() },
-    llm: createLlmProvider(config),
+    // The `AI` binding is optional (SPEC §13.2): add it to wrangler.jsonc to use Workers AI.
+    llm: createLlmProvider(config, { ai: (env as { AI?: WorkersAiBinding }).AI }),
     defer: (task) => ctx.waitUntil(task),
   };
 }
