@@ -18,6 +18,7 @@ Instructions for coding agents working on denarii (repo: `expense_server`).
 - `just dev`: local Worker with local D1, wired to the dev bot (ADR-0013). Secrets in `apps/cloudflare/.dev.vars`, never production values. `just ingest <app> <title> <text>` posts a notification to it
 - `just`: list recipes, including ops for the deployed Worker (secret rotation, webhook status, `ingest-prod`). Production secrets are in `apps/cloudflare/.prod.vars`
 - `npm start -w @denarii/node`: Node runtime (ADR-0004) with env vars as in SPEC §13.1. Telegram defaults to `polling`. Its tests also run the `@denarii/api` suite against a SQLite file
+- `docker compose up -d` (in `docker/`, after `cp .env.example .env`): self-hosted Node runtime (SPEC §13.3); `--profile tunnel` adds `cloudflared`, `--build` builds the image locally. Image published to `ghcr.io/guernik/denarii` on `v*` tags
 - `npm run denarii -w @denarii/cli -- import <file.json|file.csv> [--remote] [--dry-run]`: backfill import (SPEC §10) into local D1 (default) or remote D1 via wrangler
 - `npm run types -w @denarii/cloudflare`: regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` or `.dev.vars`
 
