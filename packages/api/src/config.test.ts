@@ -25,3 +25,22 @@ describe("LLM config", () => {
     expect(() => parseConfig({ ...BASE, LLM_PROVIDER: "openai" })).toThrow(/LLM_PROVIDER/);
   });
 });
+
+describe("Telegram mode", () => {
+  const { TELEGRAM_WEBHOOK_SECRET: _, ...noSecret } = BASE;
+
+  it("defaults to webhook, which requires TELEGRAM_WEBHOOK_SECRET", () => {
+    expect(parseConfig(BASE).TELEGRAM_MODE).toBe("webhook");
+    expect(() => parseConfig(noSecret)).toThrow(/TELEGRAM_WEBHOOK_SECRET/);
+  });
+
+  it("does not need a webhook secret for polling", () => {
+    expect(parseConfig({ ...noSecret, TELEGRAM_MODE: "polling" })).toMatchObject({
+      TELEGRAM_MODE: "polling",
+    });
+  });
+
+  it("rejects unknown modes", () => {
+    expect(() => parseConfig({ ...BASE, TELEGRAM_MODE: "push" })).toThrow(/TELEGRAM_MODE/);
+  });
+});

@@ -20,13 +20,20 @@ function isTimeZone(tz: string): boolean {
   }
 }
 
+export const TELEGRAM_MODES = ["webhook", "polling"] as const;
+
 /** Runtime configuration from environment variables (SPEC §13.1). */
 export const configSchema = z
   .object({
     WEBHOOK_SECRET: z.string().min(16, "use at least 16 characters"),
     TELEGRAM_BOT_TOKEN: z.string().min(1),
     TELEGRAM_CHAT_ID: z.string().regex(/^-?\d+$/),
-    TELEGRAM_WEBHOOK_SECRET: z.string().regex(/^[A-Za-z0-9_-]{16,256}$/),
+    /** `webhook` on Cloudflare (only option); the Node runtime defaults to `polling`. */
+    TELEGRAM_MODE: z.enum(TELEGRAM_MODES).default("webhook"),
+    TELEGRAM_WEBHOOK_SECRET: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{16,256}$/)
+      .optional(),
     RULE_PACKS: z
       .string()
       .transform((s) =>
@@ -46,6 +53,10 @@ export const configSchema = z
     LLM_PROVIDER: z.enum(LLM_PROVIDERS).default("none"),
     LLM_MODEL: z.string().min(1).optional(),
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  })
+  .refine((c) => c.TELEGRAM_MODE !== "webhook" || c.TELEGRAM_WEBHOOK_SECRET, {
+    message: "required when TELEGRAM_MODE=webhook",
+    path: ["TELEGRAM_WEBHOOK_SECRET"],
   })
   .refine((c) => c.LLM_PROVIDER !== "anthropic" || c.ANTHROPIC_API_KEY, {
     message: "required when LLM_PROVIDER=anthropic",

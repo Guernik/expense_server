@@ -369,7 +369,7 @@ Where each diagram box lives in the code. *Planned* boxes have no code yet.
 | Diagram | Code |
 |---|---|
 | Notification, MacroDroid | [`macrodroid/`](macrodroid/). Payload in §13.4 |
-| Denarii runtime | [`apps/cloudflare/src/index.ts`](apps/cloudflare/src/index.ts), [`apps/cloudflare/wrangler.jsonc`](apps/cloudflare/wrangler.jsonc). Node: *planned* (`apps/node/`) |
+| Denarii runtime | [`apps/cloudflare/src/index.ts`](apps/cloudflare/src/index.ts), [`apps/cloudflare/wrangler.jsonc`](apps/cloudflare/wrangler.jsonc). Node: [`apps/node/src/start.ts`](apps/node/src/start.ts) (polling in [`polling.ts`](apps/node/src/polling.ts), node-cron tick in [`scheduler.ts`](apps/node/src/scheduler.ts)) |
 | Hono API | [`packages/api/src/app.ts`](packages/api/src/app.ts) (`/api/ingest`, `/api/telegram`). tRPC: *planned* |
 | React SPA | *Planned*: `apps/web/` |
 | Google OAuth | *Planned*: Better Auth ([ADR-0008](docs/adr/0008-better-auth-google.md)) |
@@ -432,7 +432,9 @@ docker/        Dockerfile, docker-compose.yml
 | `LOCALE` | no | `en` \| `es`, default `en` |
 | `DIGEST_CRON` | no | Default `0 21 * * *` (local) |
 | `LLM_PROVIDER`, `LLM_MODEL`, provider keys | no | §11 |
-| `DATABASE_PATH` | Node only | Default `/data/denarii.db` |
+| `DATABASE_PATH` | Node only | Default `/data/denarii.db`. Migrations are applied on startup |
+| `PORT` | Node only | Default `3000` |
+| `WEB_ROOT` | Node only | Built SPA directory. Default `apps/web/dist` |
 
 ### 13.2 Cloudflare (default, reference instance)
 

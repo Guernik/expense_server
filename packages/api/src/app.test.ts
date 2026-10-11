@@ -286,6 +286,12 @@ describe("POST /api/telegram", () => {
     expect((await telegram({}, "nope")).status).toBe(401);
   });
 
+  it("rejects every request when no webhook secret is configured (polling mode)", async () => {
+    const { runtime, telegram } = setup("es", { env: { TELEGRAM_MODE: "polling" } });
+    runtime.config.TELEGRAM_WEBHOOK_SECRET = undefined;
+    expect((await telegram({}, "")).status).toBe(401);
+  });
+
   it("ignores chats other than the configured one", async () => {
     const { messages, telegram } = setup();
     const response = await telegram({
