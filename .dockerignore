@@ -1,0 +1,14 @@
+**/node_modules
+**/.nx
+**/.wrangler
+**/.dev.vars
+**/.prod.vars
+**/.env
+**/*.tsbuildinfo
+.git
+.github
+docker/
+docs/
+fixtures/
+macrodroid/
+**/*.test.ts

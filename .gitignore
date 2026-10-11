@@ -5,3 +5,4 @@ node_modules/
 .prod.vars
 *.tsbuildinfo
 __pycache__/
+.env
